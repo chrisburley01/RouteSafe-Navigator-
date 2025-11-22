@@ -1,6 +1,24 @@
-/* ==========================
-   Global layout / base
-   ========================== */
+/* ---- Base layout -------------------------------------------------------- */
+
+:root {
+  --ws-bg: #020924;
+  --ws-bg-elevated: #050f33;
+  --ws-card: radial-gradient(circle at top left, #10224f 0, #050f33 60%, #020924 100%);
+  --ws-border: rgba(255, 255, 255, 0.08);
+  --ws-text: #f5f7ff;
+  --ws-text-soft: #c3c8f0;
+  --ws-accent: #4e8cff;
+  --ws-accent-soft: #87b0ff;
+  --ws-danger: #ff5b5b;
+  --ws-danger-soft: rgba(255, 91, 91, 0.18);
+  --ws-muted-chip: rgba(255, 255, 255, 0.08);
+  --ws-radius-lg: 26px;
+  --ws-radius-pill: 999px;
+  --ws-shadow-soft: 0 22px 45px rgba(0, 0, 0, 0.55);
+  --ws-input-bg: rgba(5, 15, 51, 0.95);
+  --ws-input-border: rgba(255, 255, 255, 0.12);
+  --ws-map-bg: #030717;
+}
 
 *,
 *::before,
@@ -8,112 +26,87 @@
   box-sizing: border-box;
 }
 
-:root {
-  --bg: #030515;
-  --bg-elevated: #050a20;
-  --bg-card: #0b1333;
-  --bg-card-alt: #0e163d;
-  --accent: #2e7bff;
-  --accent-soft: rgba(46, 123, 255, 0.25);
-  --accent-strong: #4bb5ff;
-  --danger: #ff5b5b;
-  --text: #f5f7ff;
-  --text-muted: #a6b1d8;
-  --border-soft: rgba(255, 255, 255, 0.08);
-  --radius-lg: 24px;
-  --radius-md: 16px;
-  --shadow-lg: 0 24px 60px rgba(0, 0, 0, 0.6);
-  --shadow-md: 0 16px 40px rgba(0, 0, 0, 0.5);
-}
-
 html,
 body {
-  height: 100%;
   margin: 0;
   padding: 0;
+  min-height: 100%;
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, "SF Pro Text",
+    "Segoe UI", sans-serif;
+  background: radial-gradient(circle at top left, #133075 0, #020514 45%, #000000 100%);
+  color: var(--ws-text);
 }
 
-body {
-  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-  color: var(--text);
-  background:
-    radial-gradient(circle at top left, #13245d 0, transparent 55%),
-    radial-gradient(circle at bottom right, #1a447c 0, transparent 60%),
-    var(--bg);
-}
-
-/* ==========================
-   Header
-   ========================== */
+/* ---- Header ------------------------------------------------------------ */
 
 .ws-header {
-  max-width: 1200px;
-  margin: 0 auto;
-  padding: 24px 20px 8px;
   display: flex;
-  align-items: center;
   justify-content: space-between;
-  gap: 16px;
+  align-items: center;
+  padding: 18px 20px;
+  background: linear-gradient(135deg, #03123b 0, #02061a 60%, #000000 100%);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+  position: sticky;
+  top: 0;
+  z-index: 20;
 }
 
 .ws-header-left {
   display: flex;
   align-items: center;
-  gap: 16px;
+  gap: 14px;
 }
 
 .ws-logo {
-  width: 48px;
-  height: 48px;
-  border-radius: 12px;
-  box-shadow: 0 0 20px rgba(0, 0, 0, 0.7);
-  object-fit: cover;
+  width: 46px;
+  height: 46px;
+  border-radius: 16px;
+  object-fit: contain;
+  background: radial-gradient(circle at 20% 0, #4e8cff 0, #020924 65%);
+  box-shadow: 0 10px 26px rgba(0, 0, 0, 0.55);
+  border: 1px solid rgba(255, 255, 255, 0.12);
 }
 
 .ws-title {
-  margin: 0 0 4px;
-  font-size: 1.6rem;
+  margin: 0;
+  font-size: 1.4rem;
+  font-weight: 650;
   letter-spacing: 0.02em;
 }
 
 .ws-subtitle {
-  margin: 0;
-  font-size: 0.9rem;
-  color: var(--text-muted);
+  margin: 2px 0 0;
+  font-size: 0.85rem;
+  color: var(--ws-text-soft);
 }
 
 .ws-header-right {
   display: flex;
-  gap: 8px;
-  flex-wrap: wrap;
+  gap: 10px;
 }
 
 .ws-pill {
-  padding: 6px 12px;
-  border-radius: 999px;
-  background: rgba(11, 19, 51, 0.95);
-  border: 1px solid rgba(111, 149, 255, 0.3);
+  padding: 6px 14px;
+  border-radius: var(--ws-radius-pill);
+  border: 1px solid rgba(255, 255, 255, 0.16);
   font-size: 0.8rem;
-  color: var(--text-muted);
+  color: var(--ws-text-soft);
+  background: radial-gradient(circle at top left, rgba(255, 255, 255, 0.08), transparent 70%);
 }
 
-/* ==========================
-   Main layout
-   ========================== */
+/* ---- Main layout ------------------------------------------------------- */
 
 .ws-main {
-  max-width: 1200px;
-  margin: 0 auto 32px;
-  padding: 8px 20px 24px;
   display: grid;
-  grid-template-columns: minmax(0, 380px) minmax(0, 1.6fr);
-  gap: 20px;
+  grid-template-columns: minmax(0, 420px) minmax(0, 1.2fr);
+  gap: 24px;
+  padding: 18px 18px 26px;
 }
 
 .ws-sidebar {
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 18px;
 }
 
 .ws-map-wrapper {
@@ -121,45 +114,49 @@ body {
   flex-direction: column;
 }
 
-/* ==========================
-   Cards
-   ========================== */
+/* ---- Cards ------------------------------------------------------------- */
 
 .ws-card {
-  background: radial-gradient(circle at top left, #182352 0, #050a20 60%);
-  border-radius: var(--radius-lg);
+  background: var(--ws-card);
+  border-radius: var(--ws-radius-lg);
+  border: 1px solid var(--ws-border);
+  box-shadow: var(--ws-shadow-soft);
   padding: 18px 18px 16px;
-  box-shadow: var(--shadow-md);
-  border: 1px solid var(--border-soft);
+  color: var(--ws-text);
 }
 
 .ws-card--form {
-  background: radial-gradient(circle at top left, #1a2c73 0, #050a20 60%);
+  padding-bottom: 18px;
 }
 
 .ws-card--map {
-  padding: 18px;
   height: 100%;
   display: flex;
   flex-direction: column;
 }
 
 .ws-card-title {
-  margin: 0 0 12px;
-  font-size: 1.05rem;
+  margin: 0;
+  font-size: 1.08rem;
+  font-weight: 620;
+}
+
+.ws-card-description {
+  margin: 8px 0 16px;
+  font-size: 0.9rem;
+  color: var(--ws-text-soft);
+  line-height: 1.4;
 }
 
 .ws-card-header-row {
   display: flex;
-  align-items: center;
   justify-content: space-between;
-  gap: 8px;
-  margin-bottom: 12px;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
 }
 
-/* ==========================
-   Form
-   ========================== */
+/* ---- Form -------------------------------------------------------------- */
 
 .ws-form {
   display: flex;
@@ -170,65 +167,74 @@ body {
 .ws-form-group {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 6px;
 }
 
 .ws-form-group label {
   font-size: 0.85rem;
-  color: var(--text-muted);
+  color: var(--ws-text-soft);
 }
 
 .ws-form-group input[type="text"],
 .ws-form-group input[type="number"] {
-  padding: 9px 11px;
-  border-radius: 10px;
-  border: 1px solid rgba(255, 255, 255, 0.16);
-  background: rgba(6, 10, 30, 0.9);
-  color: var(--text);
-  font-size: 0.92rem;
+  width: 100%;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid var(--ws-input-border);
+  background: var(--ws-input-bg);
   outline: none;
-  transition: border-color 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
+  color: var(--ws-text);
+  font-size: 0.95rem;
+  transition: border-color 0.16s ease, box-shadow 0.16s ease, background 0.16s ease;
 }
 
 .ws-form-group input::placeholder {
-  color: rgba(166, 177, 216, 0.7);
+  color: rgba(195, 200, 240, 0.6);
 }
 
 .ws-form-group input:focus {
-  border-color: var(--accent);
-  box-shadow: 0 0 0 1px var(--accent-soft);
-  background: rgba(10, 18, 45, 0.95);
+  border-color: var(--ws-accent-soft);
+  box-shadow: 0 0 0 1px rgba(135, 176, 255, 0.55);
+  background: rgba(5, 15, 51, 1);
 }
 
 .ws-form-group--split {
   display: flex;
+  flex-wrap: wrap;
   justify-content: space-between;
   gap: 16px;
 }
 
-.ws-form-group--split > div {
-  flex: 1;
+.ws-form-group--split > div:first-child {
+  flex: 1 1 52%;
 }
+
+.ws-hint {
+  display: block;
+  margin-top: 2px;
+  font-size: 0.75rem;
+  color: rgba(195, 200, 240, 0.7);
+}
+
+/* ---- Toggle ------------------------------------------------------------ */
 
 .ws-toggle-group {
   display: flex;
   flex-direction: column;
-  justify-content: center;
-  gap: 4px;
+  gap: 6px;
+  align-items: flex-start;
 }
 
 .ws-toggle-label {
   font-size: 0.85rem;
-  color: var(--text-muted);
+  color: var(--ws-text-soft);
 }
-
-/* Switch */
 
 .ws-switch {
   position: relative;
-  width: 46px;
-  height: 26px;
   display: inline-block;
+  width: 50px;
+  height: 26px;
 }
 
 .ws-switch input {
@@ -241,159 +247,200 @@ body {
   position: absolute;
   cursor: pointer;
   inset: 0;
-  background-color: #22263d;
+  background: rgba(255, 255, 255, 0.12);
+  transition: 0.3s;
   border-radius: 999px;
-  transition: 0.25s;
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.08);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.12);
 }
 
-.ws-slider::before {
-  content: "";
+.ws-slider:before {
   position: absolute;
-  height: 18px;
-  width: 18px;
-  left: 4px;
-  top: 4px;
+  content: "";
+  height: 20px;
+  width: 20px;
+  left: 3px;
+  top: 3px;
+  background: linear-gradient(135deg, #ffffff, #d3e3ff);
   border-radius: 50%;
-  background-color: #ffffff;
-  transition: 0.25s;
-  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.4);
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.6);
+  transition: 0.3s;
 }
 
 .ws-switch input:checked + .ws-slider {
-  background: linear-gradient(90deg, var(--accent), var(--accent-strong));
-  box-shadow: 0 0 16px rgba(46, 123, 255, 0.65);
+  background: radial-gradient(circle at 0 0, #87b0ff, #4e8cff);
 }
 
-.ws-switch input:checked + .ws-slider::before {
-  transform: translateX(18px);
+.ws-switch input:checked + .ws-slider:before {
+  transform: translateX(22px);
 }
 
-/* Buttons */
+/* ---- Buttons & status -------------------------------------------------- */
 
 .ws-btn {
-  border-radius: 999px;
-  border: none;
-  cursor: pointer;
-  font-size: 0.96rem;
-  padding: 11px 16px;
-  font-weight: 500;
   display: inline-flex;
-  align-items: center;
   justify-content: center;
+  align-items: center;
   gap: 8px;
-  transition: background 0.15s ease, box-shadow 0.15s ease, transform 0.08s ease;
+  border-radius: 16px;
+  border: none;
+  padding: 12px 16px;
+  font-size: 1rem;
+  font-weight: 550;
+  cursor: pointer;
+  transition: transform 0.08s ease, box-shadow 0.12s ease, background 0.12s ease;
 }
 
 .ws-btn-primary {
-  background: linear-gradient(135deg, var(--accent), var(--accent-strong));
-  color: #fff;
-  box-shadow: 0 18px 40px rgba(30, 100, 255, 0.45);
+  background: linear-gradient(135deg, #4e8cff, #6da5ff);
+  color: #ffffff;
+  box-shadow: 0 14px 30px rgba(0, 0, 0, 0.6);
 }
 
 .ws-btn-primary:hover {
+  background: linear-gradient(135deg, #5a94ff, #7bb0ff);
   transform: translateY(-1px);
-  box-shadow: 0 22px 50px rgba(30, 100, 255, 0.6);
+  box-shadow: 0 16px 32px rgba(0, 0, 0, 0.65);
 }
 
-.ws-btn-primary:active {
-  transform: translateY(0);
-  box-shadow: 0 12px 30px rgba(30, 100, 255, 0.5);
+.ws-btn-primary:disabled {
+  opacity: 0.65;
+  cursor: default;
+  box-shadow: none;
 }
-
-/* Status text */
 
 .ws-status {
-  margin: 4px 0 0;
+  min-height: 1.3em;
+  margin: 6px 0 0;
   font-size: 0.82rem;
-  color: var(--text-muted);
-  min-height: 1.1em;
+  color: var(--ws-text-soft);
 }
 
-/* ==========================
-   Map card
-   ========================== */
+/* ---- Badges / chips ---------------------------------------------------- */
+
+.ws-badge {
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+}
+
+.ws-badge--muted {
+  background: var(--ws-muted-chip);
+  color: var(--ws-text-soft);
+}
+
+.ws-badge--ok {
+  background: rgba(46, 204, 113, 0.18);
+  border-color: rgba(46, 204, 113, 0.6);
+  color: #7bed9f;
+}
+
+.ws-badge--warn {
+  background: rgba(255, 165, 0, 0.18);
+  border-color: rgba(255, 165, 0, 0.8);
+  color: #ffd27f;
+}
+
+.ws-badge--danger {
+  background: var(--ws-danger-soft);
+  border-color: rgba(255, 91, 91, 0.9);
+  color: #ffaaaa;
+}
+
+/* ---- Summary / lists --------------------------------------------------- */
+
+.ws-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px 14px;
+  margin: 10px 0 0;
+  font-size: 0.9rem;
+}
+
+.ws-summary-grid dt {
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: rgba(195, 200, 240, 0.7);
+}
+
+.ws-summary-grid dd {
+  margin: 2px 0 0;
+  font-weight: 500;
+}
+
+.ws-list {
+  margin: 6px 0 0;
+  padding-left: 18px;
+  font-size: 0.87rem;
+  color: var(--ws-text-soft);
+}
+
+.ws-list li + li {
+  margin-top: 4px;
+}
+
+.ws-steps-list {
+  margin: 6px 0 0;
+  padding-left: 20px;
+  font-size: 0.86rem;
+  color: var(--ws-text-soft);
+}
+
+.ws-steps-list li + li {
+  margin-top: 3px;
+}
+
+/* ---- Map --------------------------------------------------------------- */
 
 .ws-map-placeholder {
-  border-radius: var(--radius-md);
-  overflow: hidden;
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  background: #050816;
-  height: 520px;
   position: relative;
+  margin-top: 8px;
+  border-radius: 20px;
+  overflow: hidden;
+  background: radial-gradient(circle at top left, #142653 0, #020514 70%);
+  min-height: 340px;
+  border: 1px solid rgba(255, 255, 255, 0.06);
 }
 
-/* Leaflet map element will inherit this */
-.ws-map-placeholder .leaflet-container,
-#map.leaflet-container {
+#map {
   width: 100%;
   height: 100%;
 }
 
-/* Optional empty state (if you ever re-add it) */
 .ws-map-empty-state {
   position: absolute;
   inset: 0;
   display: flex;
   flex-direction: column;
-  align-items: center;
   justify-content: center;
-  gap: 8px;
+  align-items: center;
   text-align: center;
   padding: 24px;
+  color: var(--ws-text-soft);
+  background: radial-gradient(circle at top, rgba(255, 255, 255, 0.04), transparent 65%);
+  pointer-events: none;
 }
 
 .ws-map-empty-title {
-  margin: 0;
-  font-size: 1rem;
-  font-weight: 500;
+  margin: 0 0 6px;
+  font-weight: 600;
 }
 
 .ws-map-empty-text {
   margin: 0;
   font-size: 0.85rem;
-  max-width: 320px;
-  color: var(--text-muted);
 }
 
-/* Badges / legend (if you use later) */
-
-.ws-badge {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  padding: 3px 9px;
-  border-radius: 999px;
-  font-size: 0.78rem;
-  border: 1px solid rgba(255, 255, 255, 0.14);
-  color: var(--text-muted);
-}
-
-.ws-badge--muted {
-  background: rgba(6, 10, 30, 0.9);
-}
-
-.ws-badge--ok {
-  background: rgba(33, 166, 122, 0.12);
-  border-color: rgba(33, 166, 122, 0.4);
-  color: #7de9c0;
-}
-
-.ws-badge--risk {
-  background: rgba(255, 91, 91, 0.1);
-  border-color: rgba(255, 91, 91, 0.6);
-  color: #ffaaaa;
-}
-
-/* Legend row (optional if you add it back) */
+/* Legend */
 
 .ws-map-legend {
-  margin-top: 10px;
   display: flex;
   flex-wrap: wrap;
-  gap: 10px 18px;
+  gap: 12px;
+  margin-top: 10px;
   font-size: 0.8rem;
-  color: var(--text-muted);
+  color: var(--ws-text-soft);
 }
 
 .ws-legend-item {
@@ -403,78 +450,71 @@ body {
 }
 
 .ws-legend-swatch {
-  width: 18px;
+  display: inline-block;
+  width: 16px;
   height: 6px;
   border-radius: 999px;
 }
 
 .ws-legend-swatch--primary {
-  background: #2e7bff;
+  background: #4e8cff;
 }
 
 .ws-legend-swatch--alt {
-  background: #bcb8ff;
+  background: #9b59ff;
 }
 
 .ws-legend-swatch--risk {
   background: #ff5b5b;
 }
 
-/* ==========================
-   Footer
-   ========================== */
+/* ---- Footer ------------------------------------------------------------ */
 
 .ws-footer {
-  max-width: 1200px;
-  margin: 0 auto 24px;
-  padding: 0 20px;
-  font-size: 0.78rem;
-  color: var(--text-muted);
-  opacity: 0.8;
+  padding: 12px 18px 18px;
+  font-size: 0.8rem;
+  color: rgba(195, 200, 240, 0.7);
+  text-align: center;
 }
 
-/* ==========================
-   Responsive
-   ========================== */
+/* ---- Leaflet tweaks ---------------------------------------------------- */
 
-@media (max-width: 900px) {
+.leaflet-container {
+  background: var(--ws-map-bg);
+}
+
+.leaflet-control-attribution {
+  font-size: 0.7rem;
+}
+
+/* ---- Responsive -------------------------------------------------------- */
+
+@media (max-width: 880px) {
   .ws-main {
     grid-template-columns: 1fr;
-  }
-
-  .ws-map-wrapper {
-    order: 3;
   }
 
   .ws-header {
     flex-direction: column;
     align-items: flex-start;
+    gap: 8px;
   }
 
   .ws-header-right {
-    align-self: stretch;
-  }
-
-  .ws-map-placeholder {
-    height: 440px;
+    align-self: flex-end;
   }
 }
 
 @media (max-width: 600px) {
-  .ws-header,
   .ws-main {
-    padding-inline: 14px;
+    padding: 14px 10px 20px;
   }
 
   .ws-card {
-    padding: 16px 14px 14px;
+    border-radius: 20px;
   }
 
-  .ws-map-placeholder {
-    height: 400px;
-  }
-
-  .ws-title {
-    font-size: 1.4rem;
+  .ws-header {
+    padding: 14px 12px;
   }
 }
