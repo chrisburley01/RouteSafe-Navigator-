@@ -1,290 +1,258 @@
 // main.js – RouteSafe Navigator v1.0
-// Frontend for the RouteSafe-AI backend.
+// Talks to RouteSafe-AI backend at /api/route
 
-// --------------- CONFIG -----------------
+// 🔗 BACKEND URL
+const API_URL = "https://routesafe-ai.onrender.com/api/route";
 
-const API_BASE_URL = "https://routesafe-ai.onrender.com"; // no trailing slash
+// ---- DOM ELEMENTS ----
+const form = document.getElementById("routeForm");
+const startInput = document.getElementById("start");
+const endInput = document.getElementById("end");
+const vehicleHeightInput = document.getElementById("vehicleHeight");
+const avoidLowBridgesInput = document.getElementById("avoidLowBridges");
 
+const statusEl = document.getElementById("routeStatus");
 
+const summaryCard = document.getElementById("routeSummaryCard");
+const summaryDistanceEl = document.getElementById("summaryDistance");
+const summaryDurationEl = document.getElementById("summaryDuration");
+const summaryRiskEl = document.getElementById("summaryRisk");
+const summaryNearestBridgeEl = document.getElementById("summaryNearestBridge");
+const riskBadgeEl = document.getElementById("riskBadge");
 
-// --------------- MAP SETUP (Leaflet) ----
+const warningsCard = document.getElementById("warningsCard");
+const warningsListEl = document.getElementById("warningsList");
 
-let map;
-let mainRouteLayer;
-let altRouteLayer;
-let bridgeLayer;
+const stepsCard = document.getElementById("stepsCard");
+const stepsListEl = document.getElementById("stepsList");
 
-function initMap() {
-  map = L.map("map").setView([53.8, -1.55], 7); // UK default view
+const mapEmptyState = document.getElementById("mapEmptyState");
 
-  L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-    maxZoom: 19,
-    attribution: "&copy; OpenStreetMap contributors",
-  }).addTo(map);
+// ---- MAP INITIALISATION ----
+let map = L.map("map").setView([53.8, -1.5], 6); // UK-ish
 
-  mainRouteLayer = L.polyline([], { weight: 5, color: "#3aa0ff" }).addTo(map);
-  altRouteLayer = L.polyline([], {
-    weight: 4,
-    color: "#a0c9ff",
-    dashArray: "6 6",
-  }).addTo(map);
-  bridgeLayer = L.layerGroup().addTo(map);
+L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+  attribution: "&copy; OpenStreetMap contributors",
+  maxZoom: 19,
+}).addTo(map);
+
+let mainRouteLayer = null;
+let altRouteLayer = null;
+let bridgeMarkersLayer = L.layerGroup().addTo(map);
+
+// ---- HELPERS ----
+
+function setStatus(message, isError = false) {
+  statusEl.textContent = message || "";
+  statusEl.classList.toggle("ws-status--error", isError);
 }
 
-document.addEventListener("DOMContentLoaded", () => {
-  initMap();
-  const form = document.getElementById("routeForm");
-  form.addEventListener("submit", handleRouteSubmit);
-});
-
-
-
-// --------------- HELPERS ----------------
-
-function setStatus(message, type = "info") {
-  const el = document.getElementById("routeStatus");
-  el.textContent = message;
-  el.className = "ws-status";
-  if (type === "error") el.classList.add("ws-status--error");
-  if (type === "success") el.classList.add("ws-status--success");
+function clearRouteLayers() {
+  if (mainRouteLayer) {
+    map.removeLayer(mainRouteLayer);
+    mainRouteLayer = null;
+  }
+  if (altRouteLayer) {
+    map.removeLayer(altRouteLayer);
+    altRouteLayer = null;
+  }
+  bridgeMarkersLayer.clearLayers();
 }
 
-function showCard(id, show) {
-  const el = document.getElementById(id);
-  if (!el) return;
-  el.hidden = !show;
-}
+function setRiskBadge(risk) {
+  riskBadgeEl.classList.remove("ws-badge--ok", "ws-badge--warn", "ws-badge--danger");
 
-function hideEmptyState() {
-  const el = document.getElementById("mapEmptyState");
-  if (el) el.style.display = "none";
-}
-
-function fmtKm(v) {
-  if (v == null) return "–";
-  const num = Number(v);
-  if (Number.isNaN(num)) return "–";
-  return `${num.toFixed(1)} km`;
-}
-
-function fmtMin(v) {
-  if (v == null) return "–";
-  const num = Number(v);
-  if (Number.isNaN(num)) return "–";
-  return `${num.toFixed(0)} min`;
-}
-
-function fmtMeters(v) {
-  if (v == null) return "–";
-  const num = Number(v);
-  if (Number.isNaN(num)) return "–";
-  return `${num.toFixed(0)} m`;
-}
-
-
-
-// --------------- FORM HANDLER -----------
-
-async function handleRouteSubmit(e) {
-  e.preventDefault();
-
-  const start = document.getElementById("start").value.trim();
-  const end = document.getElementById("end").value.trim();
-  const height = parseFloat(
-    document.getElementById("vehicleHeight").value.trim()
-  );
-  const avoidLowBridges =
-    document.getElementById("avoidLowBridges").checked || false;
-
-  if (!start || !end || !height || height <= 0) {
-    setStatus("Please enter start, destination and a valid vehicle height.", "error");
+  if (!risk || !risk.level) {
+    riskBadgeEl.textContent = "No data";
+    riskBadgeEl.classList.add("ws-badge--muted");
     return;
   }
 
-  setStatus("Requesting safe HGV route from RouteSafe-AI…");
+  let label = "";
+  if (risk.level === "low") {
+    label = "Low risk";
+    riskBadgeEl.classList.add("ws-badge--ok");
+  } else if (risk.level === "medium") {
+    label = "Medium risk";
+    riskBadgeEl.classList.add("ws-badge--warn");
+  } else {
+    label = "High risk";
+    riskBadgeEl.classList.add("ws-badge--danger");
+  }
+  riskBadgeEl.textContent = label;
+}
 
-  // Reset UI
-  mainRouteLayer.setLatLngs([]);
-  altRouteLayer.setLatLngs([]);
-  bridgeLayer.clearLayers();
-  hideEmptyState();
-  showCard("routeSummaryCard", false);
-  showCard("warningsCard", false);
-  showCard("stepsCard", false);
+// ---- FORM SUBMIT ----
 
-  const payload = {
-    start,
-    end,
-    vehicle_height_m: height,
-    avoid_low_bridges: avoidLowBridges,
-  };
+form.addEventListener("submit", async (event) => {
+  event.preventDefault();
+
+  const start = startInput.value.trim();
+  const end = endInput.value.trim();
+  const heightStr = vehicleHeightInput.value.trim();
+  const avoidLowBridges = !!avoidLowBridgesInput.checked;
+
+  if (!start || !end || !heightStr) {
+    setStatus("Please fill in start, destination and vehicle height.", true);
+    return;
+  }
+
+  const vehicleHeight = parseFloat(heightStr);
+  if (isNaN(vehicleHeight) || vehicleHeight <= 0) {
+    setStatus("Vehicle height must be a positive number.", true);
+    return;
+  }
+
+  setStatus("Requesting safe HGV route from RouteSafe-AI...");
+  form.querySelector("button[type='submit']").disabled = true;
+  mapEmptyState.style.display = "none";
+
+  clearRouteLayers();
+  summaryCard.hidden = true;
+  warningsCard.hidden = true;
+  stepsCard.hidden = true;
 
   try {
-    const res = await fetch(`${API_BASE_URL}/api/route`, {
+    const payload = {
+      start: start,
+      end: end,
+      vehicle_height_m: vehicleHeight,
+      avoid_low_bridges: avoidLowBridges,
+    };
+
+    // 🔍 DEBUG: show payload in UI if needed
+    console.log("Sending to API:", payload);
+
+    const response = await fetch(API_URL, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+      },
       body: JSON.stringify(payload),
     });
 
-    if (!res.ok) {
-      const txt = await res.text();
-      throw new Error(`API error ${res.status}: ${txt.slice(0, 200)}`);
+    // If backend returned an error, grab its message
+    if (!response.ok) {
+      let detail = "";
+      try {
+        const errJson = await response.json();
+        if (errJson && errJson.detail) {
+          detail =
+            typeof errJson.detail === "string"
+              ? errJson.detail
+              : JSON.stringify(errJson.detail);
+        } else {
+          detail = JSON.stringify(errJson);
+        }
+      } catch (e) {
+        detail = "(no JSON error body)";
+      }
+      throw new Error(`RouteSafe-AI error ${response.status}: ${detail}`);
     }
 
-    const data = await res.json();
-    renderRouteResult(data);
-    setStatus("Route generated successfully ✔", "success");
+    const data = await response.json();
+    console.log("API response:", data);
+
+    // ---- UPDATE SUMMARY ----
+    summaryDistanceEl.textContent = `${data.summary.distance_km.toFixed(1)} km`;
+    summaryDurationEl.textContent = `${data.summary.duration_min.toFixed(0)} min`;
+    summaryRiskEl.textContent = data.bridge_risk.status_text || "-";
+
+    if (data.bridge_risk.nearest_bridge_height_m) {
+      const h = data.bridge_risk.nearest_bridge_height_m.toFixed(2);
+      const d = data.bridge_risk.nearest_bridge_distance_m
+        ? data.bridge_risk.nearest_bridge_distance_m.toFixed(0)
+        : "–";
+      summaryNearestBridgeEl.textContent = `${h} m (${d} m away)`;
+    } else {
+      summaryNearestBridgeEl.textContent = "No bridge nearby in dataset";
+    }
+
+    setRiskBadge(data.bridge_risk);
+    summaryCard.hidden = false;
+
+    // ---- WARNINGS ----
+    warningsListEl.innerHTML = "";
+    if (data.warnings && data.warnings.length > 0) {
+      data.warnings.forEach((w) => {
+        const li = document.createElement("li");
+        li.textContent = w;
+        warningsListEl.appendChild(li);
+      });
+      warningsCard.hidden = false;
+    }
+
+    // ---- STEPS ----
+    stepsListEl.innerHTML = "";
+    if (data.steps && data.steps.length > 0) {
+      data.steps.forEach((s) => {
+        const li = document.createElement("li");
+        li.textContent = s;
+        stepsListEl.appendChild(li);
+      });
+      stepsCard.hidden = false;
+    }
+
+    // ---- MAP ROUTES ----
+    if (data.main_geojson && data.main_geojson.type === "LineString") {
+      mainRouteLayer = L.geoJSON(
+        {
+          type: "Feature",
+          geometry: data.main_geojson,
+        },
+        {
+          style: {
+            color: "#4c8dff",
+            weight: 5,
+          },
+        }
+      ).addTo(map);
+      map.fitBounds(mainRouteLayer.getBounds(), { padding: [20, 20] });
+    }
+
+    if (data.alt_geojson && data.alt_geojson.type === "LineString") {
+      altRouteLayer = L.geoJSON(
+        {
+          type: "Feature",
+          geometry: data.alt_geojson,
+        },
+        {
+          style: {
+            color: "#8a8aff",
+            weight: 4,
+            dashArray: "8 6",
+          },
+        }
+      ).addTo(map);
+    }
+
+    // ---- BRIDGE MARKERS ----
+    bridgeMarkersLayer.clearLayers();
+    if (data.bridges && data.bridges.length > 0) {
+      data.bridges.forEach((b) => {
+        const marker = L.circleMarker([b.lat, b.lon], {
+          radius: 6,
+          weight: 2,
+          color: "#ff5b3a",
+          fillColor: "#ff5b3a",
+          fillOpacity: 0.9,
+        });
+        marker.bindPopup(
+          `<strong>Bridge ${b.height_m.toFixed(2)} m</strong><br>${b.message}`
+        );
+        bridgeMarkersLayer.addLayer(marker);
+      });
+    }
+
+    setStatus("Route generated successfully.");
   } catch (err) {
     console.error(err);
     setStatus(
-      "Error generating route. Check the API is up and try again.",
-      "error"
+      `Could not generate route: ${err.message}. Check Render logs if this keeps happening.`,
+      true
     );
+    mapEmptyState.style.display = "block";
+  } finally {
+    form.querySelector("button[type='submit']").disabled = false;
   }
-}
-
-
-
-// --------------- RENDER RESULT ----------
-
-function renderRouteResult(result) {
-  // --- Map geometry ---
-  const mainLatLngs = extractRouteLatLngs(result, "main");
-  const altLatLngs = extractRouteLatLngs(result, "alt");
-
-  if (mainLatLngs.length > 0) {
-    mainRouteLayer.setLatLngs(mainLatLngs);
-  }
-  if (altLatLngs.length > 0) {
-    altRouteLayer.setLatLngs(altLatLngs);
-  }
-
-  // Fit bounds if we have points
-  const allPoints = [...mainLatLngs, ...altLatLngs];
-  if (allPoints.length > 0) {
-    map.fitBounds(L.latLngBounds(allPoints), { padding: [30, 30] });
-  }
-
-  // --- Bridge markers ---
-  const bridges =
-    result.bridge_markers || result.bridges || result.low_bridges || [];
-  bridges.forEach((b) => {
-    if (!b.lat || !b.lon) return;
-    const marker = L.circleMarker([b.lat, b.lon], {
-      radius: 7,
-      weight: 2,
-      color: "#ff7043",
-      fillColor: "#ff7043",
-      fillOpacity: 0.9,
-    });
-    const h =
-      b.height_m != null
-        ? `${Number(b.height_m).toFixed(2)} m`
-        : "Height unknown";
-    const msg = b.message || `Low bridge: ${h}`;
-    marker.bindPopup(msg);
-    marker.addTo(bridgeLayer);
-  });
-
-  // --- Summary metrics ---
-  const summary = result.summary || {};
-  const distanceKm =
-    summary.distance_km ?? result.distance_km ?? result.main_distance_km;
-  const durationMin =
-    summary.duration_min ?? result.duration_min ?? result.main_duration_min;
-
-  document.getElementById("summaryDistance").textContent = fmtKm(distanceKm);
-  document.getElementById("summaryDuration").textContent = fmtMin(durationMin);
-
-  const bridgeRisk = result.bridge_risk || {};
-  const riskLevel = bridgeRisk.level || "Unknown";
-  document.getElementById("summaryRisk").textContent =
-    bridgeRisk.status_text || riskLevel;
-
-  const nearestHeight =
-    bridgeRisk.nearest_bridge_height_m ?? bridgeRisk.nearest_height_m;
-  const nearestDist =
-    bridgeRisk.nearest_bridge_distance_m ?? bridgeRisk.nearest_distance_m;
-
-  document.getElementById("summaryNearestBridge").textContent =
-    nearestHeight == null && nearestDist == null
-      ? "–"
-      : `${fmtMeters(nearestHeight)} at ${fmtMeters(nearestDist)}`;
-
-  const riskBadge = document.getElementById("riskBadge");
-  riskBadge.textContent = riskLevel || "No data";
-  riskBadge.className = "ws-badge";
-  if (riskLevel === "high") riskBadge.classList.add("ws-badge--high");
-  else if (riskLevel === "medium") riskBadge.classList.add("ws-badge--warn");
-  else riskBadge.classList.add("ws-badge--ok");
-
-  showCard("routeSummaryCard", true);
-
-  // --- Warnings ---
-  const warningsContainer = document.getElementById("warningsList");
-  warningsContainer.innerHTML = "";
-
-  const warnings = result.warnings || [];
-  if (warnings.length === 0) {
-    const li = document.createElement("li");
-    li.textContent = "No additional warnings.";
-    warningsContainer.appendChild(li);
-  } else {
-    warnings.forEach((w) => {
-      const li = document.createElement("li");
-      li.textContent = typeof w === "string" ? w : w.message || "Warning";
-      warningsContainer.appendChild(li);
-    });
-  }
-  showCard("warningsCard", true);
-
-  // --- Steps ---
-  const stepsEl = document.getElementById("stepsList");
-  stepsEl.innerHTML = "";
-  const steps = result.steps || result.turn_by_turn || [];
-  if (steps.length === 0) {
-    const li = document.createElement("li");
-    li.textContent = "No turn-by-turn instructions returned.";
-    stepsEl.appendChild(li);
-  } else {
-    steps.forEach((s, i) => {
-      const li = document.createElement("li");
-      const text = typeof s === "string" ? s : s.instruction || JSON.stringify(s);
-      li.textContent = `${i + 1}. ${text}`;
-      stepsEl.appendChild(li);
-    });
-  }
-  showCard("stepsCard", true);
-}
-
-
-
-// --------------- GEOMETRY EXTRACTION ----
-
-// Try to cope with different response shapes: `geometry`, `main_geojson`, etc.
-function extractRouteLatLngs(result, which) {
-  // which: "main" or "alt"
-  const coords = [];
-
-  // 1) Our original ORS-style geometry
-  if (result.geometry && result.geometry.coordinates && which === "main") {
-    result.geometry.coordinates.forEach(([lon, lat]) =>
-      coords.push([lat, lon])
-    );
-  }
-
-  if (result.alt_geometry && result.alt_geometry.coordinates && which === "alt") {
-    result.alt_geometry.coordinates.forEach(([lon, lat]) =>
-      coords.push([lat, lon])
-    );
-  }
-
-  // 2) GeoJSON line under `main_geojson` / `alt_geojson`
-  const key = which === "main" ? "main_geojson" : "alt_geojson";
-  if (result[key] && result[key].coordinates) {
-    result[key].coordinates.forEach(([lon, lat]) => coords.push([lat, lon]));
-  }
-
-  // 3) Fallback: no coords found
-  return coords;
-}
+});
