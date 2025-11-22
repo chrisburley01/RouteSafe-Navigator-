@@ -1,207 +1,214 @@
-from pathlib import Path
-from typing import Optional, List, Literal
+// main.js – RouteSafe Navigator v1.0
+// Frontend UI that talks to the RouteSafe-AI backend.
 
-from fastapi import FastAPI, HTTPException
-from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
-from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel
+// 🔗 API base – RouteSafe-AI FastAPI service on Render
+const API_BASE_URL = "https://routesafe-ai.onrender.com"; // adjust if your URL differs
 
-BASE_DIR = Path(__file__).resolve().parent
+// 🌍 Leaflet map setup
+let map;
+let mainRouteLayer;
+let altRouteLayer;
+let bridgeMarkersLayer;
 
-app = FastAPI(title="RouteSafe Navigator API")
+function initMap() {
+  map = L.map("map").setView([53.8, -1.6], 7); // UK-ish default
 
-# --- CORS ---
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+  L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+    maxZoom: 19,
+    attribution: '&copy; OpenStreetMap contributors',
+  }).addTo(map);
 
-# --- Static files ---
+  mainRouteLayer = L.polyline([], { weight: 5 });
+  altRouteLayer = L.polyline([], { weight: 4, dashArray: "6 6" });
+  bridgeMarkersLayer = L.layerGroup();
 
-assets_dir = BASE_DIR / "assets"
-assets_dir.mkdir(exist_ok=True)
+  mainRouteLayer.addTo(map);
+  altRouteLayer.addTo(map);
+  bridgeMarkersLayer.addTo(map);
+}
 
-# /assets/...  (logo etc.)
-app.mount("/assets", StaticFiles(directory=assets_dir), name="assets")
+document.addEventListener("DOMContentLoaded", () => {
+  initMap();
+  const form = document.getElementById("route-form");
+  form.addEventListener("submit", handleRouteSubmit);
+});
 
+async function handleRouteSubmit(event) {
+  event.preventDefault();
 
-# ---- SPA + static routes ----
+  clearStatus();
+  setStatus("Requesting safe HGV route…");
 
-@app.get("/", include_in_schema=False)
-async def serve_index() -> FileResponse:
-  index_path = BASE_DIR / "index.html"
-  if not index_path.exists():
-      raise HTTPException(status_code=404, detail="index.html not found")
-  return FileResponse(index_path)
+  const start = document.getElementById("start").value.trim();
+  const end = document.getElementById("end").value.trim();
+  const heightM = parseFloat(
+    document.getElementById("vehicle-height-m").value.trim()
+  );
+  const avoidLowBridges = document.getElementById("avoid-low-bridges").checked;
 
+  if (!start || !end || isNaN(heightM) || heightM <= 0) {
+    setStatus("Please enter start, end and a valid vehicle height.", "error");
+    return;
+  }
 
-@app.get("/style.css", include_in_schema=False)
-async def serve_css() -> FileResponse:
-  css_path = BASE_DIR / "style.css"
-  if not css_path.exists():
-      raise HTTPException(status_code=404, detail="style.css not found")
-  return FileResponse(css_path)
+  const payload = {
+    start,
+    end,
+    vehicle_height_m: heightM,
+    avoid_low_bridges: avoidLowBridges,
+  };
 
+  try {
+    const res = await fetch(`${API_BASE_URL}/api/route`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(payload),
+    });
 
-@app.get("/main.js", include_in_schema=False)
-async def serve_js() -> FileResponse:
-  js_path = BASE_DIR / "main.js"
-  if not js_path.exists():
-      raise HTTPException(status_code=404, detail="main.js not found")
-  return FileResponse(js_path)
+    if (!res.ok) {
+      const text = await res.text();
+      throw new Error(`API error ${res.status}: ${text}`);
+    }
 
+    const data = await res.json();
+    renderRouteResult(data);
+    setStatus("Route generated using RouteSafe-AI ✅", "success");
+  } catch (err) {
+    console.error(err);
+    setStatus(
+      "Error generating route. Check start/end and try again (or engine logs).",
+      "error"
+    );
+  }
+}
 
-# --- API models ---
+// 🧠 Render route, alt route, bridges, warnings, steps, metrics
+function renderRouteResult(result) {
+  // 1) Route lines
+  mainRouteLayer.setLatLngs([]);
+  altRouteLayer.setLatLngs([]);
+  bridgeMarkersLayer.clearLayers();
 
-class RouteRequest(BaseModel):
-    start: str
-    end: str
-    vehicle_height_m: float
-    avoid_low_bridges: bool = True
+  if (result.geometry && result.geometry.coordinates) {
+    const mainCoords = result.geometry.coordinates.map(([lon, lat]) => [
+      lat,
+      lon,
+    ]);
+    mainRouteLayer.setLatLngs(mainCoords);
+  }
 
+  if (result.alt_geometry && result.alt_geometry.coordinates) {
+    const altCoords = result.alt_geometry.coordinates.map(([lon, lat]) => [
+      lat,
+      lon,
+    ]);
+    altRouteLayer.setLatLngs(altCoords);
+  }
 
-class BridgeRisk(BaseModel):
-    level: Literal["low", "medium", "high"]
-    status_text: str
-    nearest_bridge_height_m: Optional[float] = None
-    nearest_bridge_distance_m: Optional[float] = None
+  // 2) Bridge markers
+  if (Array.isArray(result.bridge_markers)) {
+    result.bridge_markers.forEach((b) => {
+      const color =
+        b.risk_level === "high"
+          ? "red"
+          : b.risk_level === "medium"
+          ? "orange"
+          : "green";
 
+      const marker = L.circleMarker([b.lat, b.lon], {
+        radius: 7,
+        weight: 2,
+        color,
+        fillOpacity: 0.8,
+      });
 
-class WarningItem(BaseModel):
-    level: Literal["low", "medium", "high"] = "low"
-    message: str
+      const msg =
+        b.message ||
+        `Bridge ${b.height_m ? b.height_m.toFixed(2) + " m" : ""} (${b.risk_level})`;
+      marker.bindPopup(msg);
+      bridgeMarkersLayer.addLayer(marker);
+    });
+  }
 
+  // 3) Fit bounds
+  const allPoints = [
+    ...mainRouteLayer.getLatLngs(),
+    ...altRouteLayer.getLatLngs(),
+  ];
+  if (allPoints.length > 0) {
+    map.fitBounds(L.latLngBounds(allPoints), { padding: [30, 30] });
+  }
 
-class StepItem(BaseModel):
-    instruction: str
+  // 4) Metrics
+  const distanceKm =
+    result.summary?.distance_km ?? result.distance_km ?? null;
+  const durationMin =
+    result.summary?.duration_min ?? result.duration_min ?? null;
 
+  document.getElementById("metric-distance").textContent = distanceKm
+    ? `${distanceKm.toFixed(1)} km`
+    : "–";
+  document.getElementById("metric-duration").textContent = durationMin
+    ? `${durationMin.toFixed(0)} min`
+    : "–";
 
-class LineString(BaseModel):
-    type: Literal["LineString"] = "LineString"
-    coordinates: List[List[float]]  # [lon, lat]
+  const bridgeRisk = result.bridge_risk || {};
+  document.getElementById("metric-risk-level").textContent =
+    bridgeRisk.level || "–";
+  document.getElementById("metric-risk-status").textContent =
+    bridgeRisk.status_text || "No status";
+  document.getElementById("metric-bridge-height").textContent =
+    bridgeRisk.nearest_bridge_height_m != null
+      ? `${bridgeRisk.nearest_bridge_height_m.toFixed(2)} m`
+      : "–";
+  document.getElementById("metric-bridge-distance").textContent =
+    bridgeRisk.nearest_bridge_distance_m != null
+      ? `${bridgeRisk.nearest_bridge_distance_m.toFixed(0)} m`
+      : "–";
 
+  // 5) Warnings
+  const warningsEl = document.getElementById("warnings-list");
+  warningsEl.innerHTML = "";
+  if (Array.isArray(result.warnings) && result.warnings.length > 0) {
+    result.warnings.forEach((w) => {
+      const li = document.createElement("li");
+      li.className = `warning warning-${w.level || "low"}`;
+      li.textContent = w.message || "Warning";
+      warningsEl.appendChild(li);
+    });
+  } else {
+    const li = document.createElement("li");
+    li.textContent = "No additional warnings.";
+    warningsEl.appendChild(li);
+  }
 
-class BridgeMarker(BaseModel):
-    lat: float
-    lon: float
-    height_m: Optional[float] = None
-    risk_level: Literal["low", "medium", "high"] = "low"
-    message: Optional[str] = None
+  // 6) Turn-by-turn steps
+  const stepsEl = document.getElementById("steps-list");
+  stepsEl.innerHTML = "";
+  if (Array.isArray(result.steps) && result.steps.length > 0) {
+    result.steps.forEach((s, i) => {
+      const li = document.createElement("li");
+      li.textContent = `${i + 1}. ${s.instruction}`;
+      stepsEl.appendChild(li);
+    });
+  } else {
+    const li = document.createElement("li");
+    li.textContent = "No turn-by-turn instructions available.";
+    stepsEl.appendChild(li);
+  }
+}
 
+// 🧾 Status helpers
+function setStatus(msg, type = "info") {
+  const el = document.getElementById("status");
+  el.textContent = msg;
+  el.className = `status status-${type}`;
+}
 
-class RouteSummary(BaseModel):
-    distance_km: float
-    duration_min: float
-
-
-class RouteResponse(BaseModel):
-    summary: RouteSummary
-    distance_km: float
-    duration_min: float
-    bridge_risk: BridgeRisk
-    warnings: List[WarningItem] = []
-    steps: List[StepItem] = []
-    geometry: Optional[LineString] = None
-    alt_geometry: Optional[LineString] = None
-    bridge_markers: List[BridgeMarker] = []
-
-
-# --- API endpoint ---
-
-@app.post("/api/route", response_model=RouteResponse)
-async def api_route(req: RouteRequest) -> RouteResponse:
-    if req.vehicle_height_m <= 0:
-        raise HTTPException(status_code=400, detail="Vehicle height must be > 0")
-
-    # TODO later: plug in your real ORS + BridgeEngine
-    return build_demo_route(req.start, req.end, req.vehicle_height_m)
-
-
-# --- Demo route (matches frontend expectations) ---
-
-def build_demo_route(start: str, end: str, vehicle_height_m: float) -> RouteResponse:
-    high_risk = vehicle_height_m > 4.8
-
-    demo_line = LineString(
-        coordinates=[
-            [-1.602, 53.758],
-            [-1.55, 53.75],
-            [-1.48, 53.74],
-            [-1.35, 53.73],
-            [-2.25, 53.48],
-        ]
-    )
-
-    alt_line: Optional[LineString] = None
-    if high_risk:
-        alt_line = LineString(
-            coordinates=[
-                [-1.602, 53.758],
-                [-1.62, 53.72],
-                [-1.7, 53.68],
-                [-1.9, 53.58],
-                [-2.25, 53.48],
-            ]
-        )
-
-    bridge_markers: List[BridgeMarker] = []
-    warnings: List[WarningItem] = []
-
-    if high_risk:
-        bridge_markers.append(
-            BridgeMarker(
-                lat=53.74,
-                lon=-1.5,
-                height_m=4.6,
-                risk_level="high",
-                message="Low bridge 4.6 m – main route diverted.",
-            )
-        )
-        warnings.append(
-            WarningItem(
-                level="high",
-                message="Low bridge (4.6 m) detected near Morley; main route diverted.",
-            )
-        )
-
-    bridge_risk = BridgeRisk(
-        level="high" if high_risk else "low",
-        status_text=(
-            "Low bridge on direct path; alternative offered."
-            if high_risk
-            else "No conflicts detected for this height."
-        ),
-        nearest_bridge_height_m=4.6 if high_risk else 5.2,
-        nearest_bridge_distance_m=130.0,
-    )
-
-    summary = RouteSummary(distance_km=27.3, duration_min=42.0)
-
-    steps = [
-        StepItem(instruction=f"Start at {start}"),
-        StepItem(instruction="Head towards M62 via A650."),
-        StepItem(
-            instruction=(
-                "Follow HGV diversion avoiding low bridge near Morley."
-                if high_risk
-                else "Follow primary route through Morley."
-            )
-        ),
-        StepItem(instruction=f"Arrive at {end}."),
-    ]
-
-    return RouteResponse(
-        summary=summary,
-        distance_km=summary.distance_km,
-        duration_min=summary.duration_min,
-        bridge_risk=bridge_risk,
-        warnings=warnings,
-        steps=steps,
-        geometry=demo_line,
-        alt_geometry=alt_line,
-        bridge_markers=bridge_markers,
-    )
+function clearStatus() {
+  const el = document.getElementById("status");
+  el.textContent = "";
+  el.className = "status";
+}
