@@ -4,12 +4,18 @@
   <meta charset="UTF-8" />
   <title>RouteSafe Navigator v1.0</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <!-- Leaflet CSS (map library) -->
+  <link
+    rel="stylesheet"
+    href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+  />
+
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
   <header class="ws-header">
     <div class="ws-header-left">
-      <!-- ROUTESAFE LOGO INSTEAD OF WALKERS -->
       <img src="assets/routesafe-logo.png" alt="RouteSafe AI" class="ws-logo" />
       <div>
         <h1 class="ws-title">RouteSafe Navigator</h1>
@@ -18,7 +24,6 @@
     </div>
     <div class="ws-header-right">
       <span class="ws-pill">v1.0</span>
-      <!-- little twist -->
       <span class="ws-pill">by RouteSafe AI</span>
     </div>
   </header>
@@ -136,7 +141,6 @@
           <span class="ws-badge ws-badge--muted">RouteSafe engine · ORS + bridge data</span>
         </div>
         <div id="map" class="ws-map-placeholder">
-          <!-- Map library (Google / Leaflet) will render here in later steps -->
           <div class="ws-map-empty-state" id="mapEmptyState">
             <p class="ws-map-empty-title">No route yet</p>
             <p class="ws-map-empty-text">
@@ -168,6 +172,8 @@
     <span>© 2025 · RouteSafe AI · HGV low-bridge protection</span>
   </footer>
 
+  <!-- Leaflet JS -->
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script src="main.js"></script>
 </body>
 </html>
