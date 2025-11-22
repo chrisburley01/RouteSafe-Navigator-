@@ -5,389 +5,95 @@
   <title>RouteSafe Navigator v1.1</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
 
-  <!-- Leaflet CSS (map library) -->
-  <link
-    rel="stylesheet"
-    href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
-    integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
-    crossorigin=""
-  />
+  <!-- Leaflet CSS -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
 
-  <!-- Your existing style.css (keep this as-is) -->
   <link rel="stylesheet" href="style.css" />
 </head>
+
 <body>
-  <!-- HEADER -->
   <header class="ws-header">
     <div class="ws-header-left">
-      <!-- Navigator logo (replace with your compass logo file) -->
-      <img
-        src="assets/routesafe-navigator-logo.png"
-        alt="RouteSafe Navigator"
-        class="ws-logo"
-      />
+      <img src="assets/routesafe-logo.png" class="ws-logo" />
       <div>
         <h1 class="ws-title">RouteSafe Navigator</h1>
-        <p class="ws-subtitle">Intelligent low-bridge avoidance for HGVs</p>
+        <p class="ws-subtitle">HGV low-bridge risk mapping</p>
       </div>
     </div>
     <div class="ws-header-right">
       <span class="ws-pill">v1.1</span>
-      <span class="ws-pill">by RouteSafe AI</span>
     </div>
   </header>
 
-  <!-- MAIN LAYOUT -->
   <main class="ws-main">
-    <!-- LEFT: CONTROL PANEL -->
     <section class="ws-sidebar">
-      <div class="ws-card ws-card--form">
+      <div class="ws-card">
         <h2 class="ws-card-title">Plan a Safe Route</h2>
-        <p class="ws-card-description">
-          Enter your start and destination and your full running height. We’ll
-          request a low-bridge-aware route from the RouteSafe engine.
-        </p>
 
         <form id="routeForm" class="ws-form">
           <div class="ws-form-group">
-            <label for="startInput">Start location</label>
-            <input
-              type="text"
-              id="startInput"
-              name="start"
-              placeholder="e.g. LS27 0BN"
-              required
-            />
+            <label for="start">Start</label>
+            <input id="start" name="start" required placeholder="LS27 0BN"/>
           </div>
 
           <div class="ws-form-group">
-            <label for="endInput">Destination</label>
-            <input
-              type="text"
-              id="endInput"
-              name="end"
-              placeholder="e.g. M31 4QN"
-              required
-            />
+            <label for="end">Destination</label>
+            <input id="end" name="end" required placeholder="HD5 0RL"/>
           </div>
 
           <div class="ws-form-group ws-form-group--split">
             <div>
-              <label for="vehicleHeightInput">Vehicle height</label>
-              <input
-                type="number"
-                id="vehicleHeightInput"
-                name="vehicleHeight"
-                step="0.01"
-                min="2"
-                max="6"
-                placeholder="4.90"
-                required
-              />
-              <small class="ws-hint">in metres</small>
+              <label for="vehicleHeight">Vehicle height (m)</label>
+              <input type="number" id="vehicleHeight" step="0.01" required placeholder="4.90" />
             </div>
+
             <div class="ws-toggle-group">
-              <span class="ws-toggle-label">Avoid low bridges</span>
+              <span>Avoid low bridges</span>
               <label class="ws-switch">
-                <input type="checkbox" id="avoidLowBridgesInput" checked />
+                <input type="checkbox" id="avoidLowBridges" checked />
                 <span class="ws-slider"></span>
               </label>
             </div>
           </div>
 
-          <button type="submit" class="ws-btn ws-btn-primary" id="planRouteBtn">
-            Generate safe route
+          <button class="ws-btn ws-btn-primary" id="planRouteBtn">
+            Generate Safe Route
           </button>
 
-          <p class="ws-status" id="routeStatus">
-            Enter details above to plan a route.
-          </p>
+          <p class="ws-status" id="routeStatus"></p>
         </form>
       </div>
 
-      <!-- SIMPLE SUMMARY CARD -->
-      <div class="ws-card" id="routeSummaryCard" hidden>
-        <div class="ws-card-header-row">
-          <h2 class="ws-card-title">Route summary</h2>
-          <span id="routeRiskBadge" class="ws-badge ws-badge--ok">
-            Route found
-          </span>
+      <div class="ws-card" id="summaryCard" hidden>
+        <h2 class="ws-card-title">Route Summary</h2>
+
+        <div class="ws-summary">
+          <div><strong>Distance:</strong> <span id="sumDistance">–</span></div>
+          <div><strong>Time:</strong> <span id="sumTime">–</span></div>
+          <div><strong>Risk:</strong> <span id="sumRisk">–</span></div>
+          <div><strong>Nearest Bridge:</strong> <span id="sumNearest">–</span></div>
         </div>
-        <dl class="ws-summary-grid">
-          <div>
-            <dt>Distance</dt>
-            <dd id="summaryDistance">–</dd>
-          </div>
-          <div>
-            <dt>Estimated time</dt>
-            <dd id="summaryDuration">–</dd>
-          </div>
-          <div>
-            <dt>Start</dt>
-            <dd id="summaryStart">–</dd>
-          </div>
-          <div>
-            <dt>Destination</dt>
-            <dd id="summaryEnd">–</dd>
-          </div>
-        </dl>
       </div>
+
+      <div class="ws-card" id="warningsCard" hidden>
+        <h2 class="ws-card-title">Warnings</h2>
+        <ul id="warningsList"></ul>
+      </div>
+
     </section>
 
-    <!-- RIGHT: MAP -->
     <section class="ws-map-wrapper">
-      <div class="ws-card ws-card--map">
-        <div class="ws-card-header-row">
-          <h2 class="ws-card-title">Map view</h2>
-          <span class="ws-badge ws-badge--muted">
-            RouteSafe engine · ORS + UK bridge data
-          </span>
-        </div>
-        <div id="map" class="ws-map-placeholder">
-          <div class="ws-map-empty-state" id="mapEmptyState">
-            <p class="ws-map-empty-title">No route yet</p>
-            <p class="ws-map-empty-text">
-              Enter a start and destination on the left, then hit
-              <strong>“Generate safe route”</strong> to see the HGV-safe route
-              here.
-            </p>
-          </div>
-        </div>
-
-        <div class="ws-map-legend">
-          <div class="ws-legend-item">
-            <span class="ws-legend-swatch ws-legend-swatch--primary"></span>
-            <span>Main route</span>
-          </div>
-          <div class="ws-legend-item">
-            <span class="ws-legend-swatch ws-legend-swatch--alt"></span>
-            <span>Alternative route</span>
-          </div>
-          <div class="ws-legend-item">
-            <span class="ws-legend-swatch ws-legend-swatch--risk"></span>
-            <span>Low bridge / hazard (coming soon)</span>
-          </div>
-        </div>
-      </div>
+      <div id="map"></div>
     </section>
   </main>
 
   <footer class="ws-footer">
-    <span>© 2025 · RouteSafe AI · HGV low-bridge protection</span>
+    © RouteSafe AI 2025
   </footer>
 
   <!-- Leaflet JS -->
-  <script
-    src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
-    integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
-    crossorigin=""
-  ></script>
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 
-  <script>
-    // ============================
-    // BASIC LEAFLET MAP SETUP
-    // ============================
-    let map;
-    let mainRouteLayer = null;
-
-    function initMap() {
-      map = L.map("map").setView([53.8, -1.6], 6); // UK-ish centre
-
-      L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-        maxZoom: 19,
-        attribution: "&copy; OpenStreetMap contributors",
-      }).addTo(map);
-    }
-
-    function clearRouteLayers() {
-      if (mainRouteLayer) {
-        map.removeLayer(mainRouteLayer);
-        mainRouteLayer = null;
-      }
-    }
-
-    // ============================
-    // STATUS & SUMMARY HELPERS
-    // ============================
-    function setStatus(message) {
-      const el = document.getElementById("routeStatus");
-      el.textContent = message;
-    }
-
-    function showSummary(data) {
-      const card = document.getElementById("routeSummaryCard");
-      const distEl = document.getElementById("summaryDistance");
-      const durEl = document.getElementById("summaryDuration");
-      const startEl = document.getElementById("summaryStart");
-      const endEl = document.getElementById("summaryEnd");
-
-      const route = data.route.routes && data.route.routes[0];
-      if (!route || !route.summary) {
-        card.hidden = true;
-        return;
-      }
-
-      const distanceKm = route.summary.distance / 1000.0;
-      const durationMin = route.summary.duration / 60.0;
-
-      distEl.textContent = distanceKm.toFixed(1) + " km";
-      durEl.textContent = Math.round(durationMin) + " minutes";
-      startEl.textContent = data.start_used || "-";
-      endEl.textContent = data.end_used || "-";
-
-      card.hidden = false;
-    }
-
-    // ============================
-    // POLYLINE DECODER (ORS / Google style)
-    // ============================
-    function decodePolyline(str, precision) {
-      let index = 0,
-        lat = 0,
-        lng = 0,
-        coordinates = [],
-        shift = 0,
-        result = 0,
-        byte = null;
-      const factor = Math.pow(10, precision || 5);
-
-      while (index < str.length) {
-        shift = 0;
-        result = 0;
-
-        do {
-          byte = str.charCodeAt(index++) - 63;
-          result |= (byte & 0x1f) << shift;
-          shift += 5;
-        } while (byte >= 0x20);
-
-        const deltaLat = (result & 1) ? ~(result >> 1) : result >> 1;
-        lat += deltaLat;
-
-        shift = 0;
-        result = 0;
-
-        do {
-          byte = str.charCodeAt(index++) - 63;
-          result |= (byte & 0x1f) << shift;
-          shift += 5;
-        } while (byte >= 0x20);
-
-        const deltaLng = (result & 1) ? ~(result >> 1) : result >> 1;
-        lng += deltaLng;
-
-        coordinates.push([lat / factor, lng / factor]);
-      }
-
-      return coordinates;
-    }
-
-    // ============================
-    // MAIN ROUTE HANDLER
-    // ============================
-    async function handleRouteSubmit(event) {
-      event.preventDefault();
-
-      const startInput = document.getElementById("startInput");
-      const endInput = document.getElementById("endInput");
-      const heightInput = document.getElementById("vehicleHeightInput");
-      const avoidInput = document.getElementById("avoidLowBridgesInput");
-
-      const payload = {
-        start: startInput.value.trim(),
-        end: endInput.value.trim(),
-        vehicle_height_m: parseFloat(heightInput.value),
-        avoid_low_bridges: !!avoidInput.checked,
-      };
-
-      if (!payload.start || !payload.end || isNaN(payload.vehicle_height_m)) {
-        setStatus("Please fill in all fields.");
-        return;
-      }
-
-      clearRouteLayers();
-      setStatus("Requesting safe HGV route from RouteSafe-AI...");
-
-      try {
-        const resp = await fetch("https://routesafe-ai.onrender.com/api/route", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify(payload),
-        });
-
-        if (!resp.ok) {
-          const text = await resp.text();
-          console.error("Backend error:", resp.status, text);
-          setStatus(
-            "Could not generate route: backend error " + resp.status + "."
-          );
-          return;
-        }
-
-        const data = await resp.json();
-        console.log("RouteSafe-AI response:", data);
-
-        const routesArr = data.route && data.route.routes;
-        if (!routesArr || !routesArr.length) {
-          setStatus("No route returned from engine.");
-          return;
-        }
-
-        const mainRoute = routesArr[0];
-
-        if (!mainRoute.geometry) {
-          setStatus("Route has no geometry data.");
-          return;
-        }
-
-        // ORS v2 default: encoded polyline, precision 5
-        const coords = decodePolyline(mainRoute.geometry, 5);
-
-        // Convert to Leaflet latlngs
-        const latLngs = coords.map(function (c) {
-          return [c[0], c[1]]; // [lat, lng]
-        });
-
-        mainRouteLayer = L.polyline(latLngs, {
-          color: "#4da3ff",
-          weight: 5,
-        }).addTo(map);
-
-        const bounds = mainRouteLayer.getBounds();
-        map.fitBounds(bounds, { padding: [30, 30] });
-
-        // Hide empty state overlay
-        const emptyState = document.getElementById("mapEmptyState");
-        if (emptyState) {
-          emptyState.style.display = "none";
-        }
-
-        showSummary(data);
-        setStatus("Route generated successfully ✔");
-      } catch (err) {
-        console.error("Error fetching route:", err);
-        setStatus(
-          "Error generating route. Check the API is up and try again."
-        );
-      }
-    }
-
-    // ============================
-    // BOOTSTRAP
-    // ============================
-    document.addEventListener("DOMContentLoaded", function () {
-      initMap();
-
-      const form = document.getElementById("routeForm");
-      form.addEventListener("submit", handleRouteSubmit);
-
-      // Optional: set some defaults for quick testing
-      document.getElementById("startInput").value = "LS27 0BN";
-      document.getElementById("endInput").value = "M31 4QN";
-      document.getElementById("vehicleHeightInput").value = "5.0";
-    });
-  </script>
+  <script src="main.js"></script>
 </body>
 </html>
