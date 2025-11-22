@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>RouteSafe Navigator v1.0</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <header class="ws-header">
+    <div class="ws-header-left">
+      <img src="assets/walkers-logo.png" alt="Walkers Transport" class="ws-logo" />
+      <div>
+        <h1 class="ws-title">RouteSafe Navigator</h1>
+        <p class="ws-subtitle">Low-bridge aware routing for HGVs</p>
+      </div>
+    </div>
+    <div class="ws-header-right">
+      <span class="ws-pill">v1.0</span>
+    </div>
+  </header>
+
+  <main class="ws-main">
+    <!-- LEFT: CONTROL & INFO PANEL -->
+    <section class="ws-sidebar">
+      <div class="ws-card ws-card--form">
+        <h2 class="ws-card-title">Plan a Safe Route</h2>
+        <p class="ws-card-description">
+          Enter your start and end postcodes and your vehicle height. We’ll calculate a
+          low-bridge–aware route using the RouteSafe engine.
+        </p>
+
+        <form id="routeForm" class="ws-form">
+          <div class="ws-form-group">
+            <label for="start">Start location</label>
+            <input
+              type="text"
+              id="start"
+              name="start"
+              placeholder="e.g. LS27 0BN or address"
+              required
+            />
+          </div>
+
+          <div class="ws-form-group">
+            <label for="end">Destination</label>
+            <input
+              type="text"
+              id="end"
+              name="end"
+              placeholder="e.g. M31 4QN or address"
+              required
+            />
+          </div>
+
+          <div class="ws-form-group ws-form-group--split">
+            <div>
+              <label for="vehicleHeight">Vehicle height</label>
+              <input
+                type="number"
+                id="vehicleHeight"
+                name="vehicleHeight"
+                step="0.01"
+                min="2"
+                max="6"
+                placeholder="4.90"
+                required
+              />
+              <small class="ws-hint">in metres</small>
+            </div>
+            <div class="ws-toggle-group">
+              <span class="ws-toggle-label">Avoid low bridges</span>
+              <label class="ws-switch">
+                <input type="checkbox" id="avoidLowBridges" checked />
+                <span class="ws-slider"></span>
+              </label>
+            </div>
+          </div>
+
+          <button type="submit" class="ws-btn ws-btn-primary" id="planRouteBtn">
+            Generate safe route
+          </button>
+
+          <p class="ws-status" id="routeStatus"></p>
+        </form>
+      </div>
+
+      <div class="ws-card" id="routeSummaryCard" hidden>
+        <div class="ws-card-header-row">
+          <h2 class="ws-card-title">Route summary</h2>
+          <span id="riskBadge" class="ws-badge ws-badge--ok">No data</span>
+        </div>
+        <dl class="ws-summary-grid">
+          <div>
+            <dt>Distance</dt>
+            <dd id="summaryDistance">–</dd>
+          </div>
+          <div>
+            <dt>Estimated time</dt>
+            <dd id="summaryDuration">–</dd>
+          </div>
+          <div>
+            <dt>Bridge risk</dt>
+            <dd id="summaryRisk">–</dd>
+          </div>
+          <div>
+            <dt>Nearest low bridge</dt>
+            <dd id="summaryNearestBridge">–</dd>
+          </div>
+        </dl>
+      </div>
+
+      <div class="ws-card" id="warningsCard" hidden>
+        <div class="ws-card-header-row">
+          <h2 class="ws-card-title">Bridge & hazard warnings</h2>
+        </div>
+        <ul id="warningsList" class="ws-list"></ul>
+      </div>
+
+      <div class="ws-card" id="stepsCard" hidden>
+        <div class="ws-card-header-row">
+          <h2 class="ws-card-title">Turn-by-turn preview</h2>
+        </div>
+        <ol id="stepsList" class="ws-steps-list"></ol>
+      </div>
+    </section>
+
+    <!-- RIGHT: MAP & LEGEND -->
+    <section class="ws-map-wrapper">
+      <div class="ws-card ws-card--map">
+        <div class="ws-card-header-row">
+          <h2 class="ws-card-title">Map view</h2>
+          <span class="ws-badge ws-badge--muted">RouteSafe engine · ORS + bridge data</span>
+        </div>
+        <div id="map" class="ws-map-placeholder">
+          <!-- Map library (Google / Leaflet) will render here in later steps -->
+          <div class="ws-map-empty-state" id="mapEmptyState">
+            <p class="ws-map-empty-title">No route yet</p>
+            <p class="ws-map-empty-text">
+              Enter a start and destination on the left, then hit
+              <strong>“Generate safe route”</strong> to see the HGV-safe route here.
+            </p>
+          </div>
+        </div>
+
+        <div class="ws-map-legend">
+          <div class="ws-legend-item">
+            <span class="ws-legend-swatch ws-legend-swatch--primary"></span>
+            <span>Main route</span>
+          </div>
+          <div class="ws-legend-item">
+            <span class="ws-legend-swatch ws-legend-swatch--alt"></span>
+            <span>Alternative route</span>
+          </div>
+          <div class="ws-legend-item">
+            <span class="ws-legend-swatch ws-legend-swatch--risk"></span>
+            <span>Low bridge / hazard</span>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="ws-footer">
+    <span>© Walkers Transport · RouteSafe AI · HGV low-bridge protection</span>
+  </footer>
+
+  <script src="main.js"></script>
+</body>
+</html>
