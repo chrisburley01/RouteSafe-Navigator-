@@ -1,4 +1,3 @@
-# main.py
 from pathlib import Path
 from typing import Optional, List, Literal
 
@@ -12,37 +11,48 @@ BASE_DIR = Path(__file__).resolve().parent
 
 app = FastAPI(title="RouteSafe Navigator API")
 
-# --- CORS (so frontend JS can call /api/route on same host or others) ---
+# --- CORS ---
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # tighten later if you want
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
 # --- Static files ---
-# /assets -> logo, images, etc.
+
 assets_dir = BASE_DIR / "assets"
 assets_dir.mkdir(exist_ok=True)
+
+# /assets/...  (logo etc.)
 app.mount("/assets", StaticFiles(directory=assets_dir), name="assets")
 
-# Serve JS/CSS directly from the root directory
-app.mount(
-    "/static",
-    StaticFiles(directory=BASE_DIR),
-    name="static",
-)
 
-
-# --- Routes to serve the SPA ---
+# ---- SPA + static routes ----
 
 @app.get("/", include_in_schema=False)
 async def serve_index() -> FileResponse:
-    index_path = BASE_DIR / "index.html"
-    if not index_path.exists():
-        raise HTTPException(status_code=404, detail="index.html not found")
-    return FileResponse(index_path)
+  index_path = BASE_DIR / "index.html"
+  if not index_path.exists():
+      raise HTTPException(status_code=404, detail="index.html not found")
+  return FileResponse(index_path)
+
+
+@app.get("/style.css", include_in_schema=False)
+async def serve_css() -> FileResponse:
+  css_path = BASE_DIR / "style.css"
+  if not css_path.exists():
+      raise HTTPException(status_code=404, detail="style.css not found")
+  return FileResponse(css_path)
+
+
+@app.get("/main.js", include_in_schema=False)
+async def serve_js() -> FileResponse:
+  js_path = BASE_DIR / "main.js"
+  if not js_path.exists():
+      raise HTTPException(status_code=404, detail="main.js not found")
+  return FileResponse(js_path)
 
 
 # --- API models ---
@@ -104,20 +114,14 @@ class RouteResponse(BaseModel):
 
 @app.post("/api/route", response_model=RouteResponse)
 async def api_route(req: RouteRequest) -> RouteResponse:
-    """
-    v1: returns a demo route so the Navigator UI works.
-    Later: replace build_demo_route(...) with real ORS + BridgeEngine call.
-    """
     if req.vehicle_height_m <= 0:
         raise HTTPException(status_code=400, detail="Vehicle height must be > 0")
 
-    # TODO: plug in your real engine here:
-    # result = routesafe_engine.get_route(...)
-    # return RouteResponse(**result)
+    # TODO later: plug in your real ORS + BridgeEngine
     return build_demo_route(req.start, req.end, req.vehicle_height_m)
 
 
-# --- Demo route generator (matches the JS expectations) ---
+# --- Demo route (matches frontend expectations) ---
 
 def build_demo_route(start: str, end: str, vehicle_height_m: float) -> RouteResponse:
     high_risk = vehicle_height_m > 4.8
