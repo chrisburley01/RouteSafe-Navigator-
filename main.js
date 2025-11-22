@@ -224,7 +224,7 @@ function initMap() {
   const mapEl = document.getElementById("map");
   if (!mapEl) return;
 
-  // Rough UK center, zoomed out
+  // Rough UK centre
   map = L.map("map").setView([53.8, -1.6], 6);
 
   L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
@@ -326,7 +326,6 @@ function geojsonCoordsToLatLngs(coords) {
 /* ---------- BACKEND EXTRACTION HELPERS ---------- */
 
 function extractMainGeometry(data) {
-  // Try a few common field names
   if (data.geometry && data.geometry.type === "LineString") {
     return data.geometry;
   }
@@ -361,7 +360,7 @@ function extractBridgeMarkers(data) {
 function buildDemoRoute(start, end, vehicleHeightM) {
   const highRisk = vehicleHeightM > 4.8;
 
-  // Fake line somewhere near Leeds -> Manchester-ish
+  // Fake line somewhere Leeds -> Manchester-ish
   const demoLine = {
     type: "LineString",
     coordinates: [
@@ -434,6 +433,3 @@ function buildDemoRoute(start, end, vehicleHeightM) {
     ],
     geometry: demoLine,
     alt_geometry: demoAltLine,
-    bridge_markers: bridgeMarkers,
-  };
-}
