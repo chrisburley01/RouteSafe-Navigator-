@@ -13,13 +13,19 @@
     crossorigin=""
   />
 
+  <!-- Your existing style.css (keep this as-is) -->
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
+  <!-- HEADER -->
   <header class="ws-header">
     <div class="ws-header-left">
-      <!-- ROUTESAFE LOGO -->
-      <img src="assets/routesafe-logo.png" alt="RouteSafe AI" class="ws-logo" />
+      <!-- Navigator logo (replace with your compass logo file) -->
+      <img
+        src="assets/routesafe-navigator-logo.png"
+        alt="RouteSafe Navigator"
+        class="ws-logo"
+      />
       <div>
         <h1 class="ws-title">RouteSafe Navigator</h1>
         <p class="ws-subtitle">Intelligent low-bridge avoidance for HGVs</p>
@@ -31,22 +37,23 @@
     </div>
   </header>
 
+  <!-- MAIN LAYOUT -->
   <main class="ws-main">
-    <!-- LEFT: CONTROL & INFO PANEL -->
+    <!-- LEFT: CONTROL PANEL -->
     <section class="ws-sidebar">
       <div class="ws-card ws-card--form">
         <h2 class="ws-card-title">Plan a Safe Route</h2>
         <p class="ws-card-description">
-          Enter start and destination postcodes plus your full running height.
-          We’ll calculate a low-bridge–aware route using the RouteSafe engine.
+          Enter your start and destination and your full running height. We’ll
+          request a low-bridge-aware route from the RouteSafe engine.
         </p>
 
-        <form id="routeForm" class="ws-form" autocomplete="off">
+        <form id="routeForm" class="ws-form">
           <div class="ws-form-group">
-            <label for="start">Start location</label>
+            <label for="startInput">Start location</label>
             <input
               type="text"
-              id="start"
+              id="startInput"
               name="start"
               placeholder="e.g. LS27 0BN"
               required
@@ -54,10 +61,10 @@
           </div>
 
           <div class="ws-form-group">
-            <label for="end">Destination</label>
+            <label for="endInput">Destination</label>
             <input
               type="text"
-              id="end"
+              id="endInput"
               name="end"
               placeholder="e.g. M31 4QN"
               required
@@ -66,10 +73,10 @@
 
           <div class="ws-form-group ws-form-group--split">
             <div>
-              <label for="vehicleHeight">Vehicle height</label>
+              <label for="vehicleHeightInput">Vehicle height</label>
               <input
                 type="number"
-                id="vehicleHeight"
+                id="vehicleHeightInput"
                 name="vehicleHeight"
                 step="0.01"
                 min="2"
@@ -77,12 +84,12 @@
                 placeholder="4.90"
                 required
               />
-              <small class="ws-hint">metres (full running height)</small>
+              <small class="ws-hint">in metres</small>
             </div>
             <div class="ws-toggle-group">
               <span class="ws-toggle-label">Avoid low bridges</span>
               <label class="ws-switch">
-                <input type="checkbox" id="avoidLowBridges" checked />
+                <input type="checkbox" id="avoidLowBridgesInput" checked />
                 <span class="ws-slider"></span>
               </label>
             </div>
@@ -92,14 +99,19 @@
             Generate safe route
           </button>
 
-          <p class="ws-status" id="routeStatus"></p>
+          <p class="ws-status" id="routeStatus">
+            Enter details above to plan a route.
+          </p>
         </form>
       </div>
 
+      <!-- SIMPLE SUMMARY CARD -->
       <div class="ws-card" id="routeSummaryCard" hidden>
         <div class="ws-card-header-row">
           <h2 class="ws-card-title">Route summary</h2>
-          <span id="riskBadge" class="ws-badge ws-badge--muted">No data</span>
+          <span id="routeRiskBadge" class="ws-badge ws-badge--ok">
+            Route found
+          </span>
         </div>
         <dl class="ws-summary-grid">
           <div>
@@ -111,32 +123,18 @@
             <dd id="summaryDuration">–</dd>
           </div>
           <div>
-            <dt>Bridge risk</dt>
-            <dd id="summaryRisk">–</dd>
+            <dt>Start</dt>
+            <dd id="summaryStart">–</dd>
           </div>
           <div>
-            <dt>Nearest low bridge</dt>
-            <dd id="summaryNearestBridge">–</dd>
+            <dt>Destination</dt>
+            <dd id="summaryEnd">–</dd>
           </div>
         </dl>
       </div>
-
-      <div class="ws-card" id="warningsCard" hidden>
-        <div class="ws-card-header-row">
-          <h2 class="ws-card-title">Bridge &amp; hazard warnings</h2>
-        </div>
-        <ul id="warningsList" class="ws-list"></ul>
-      </div>
-
-      <div class="ws-card" id="stepsCard" hidden>
-        <div class="ws-card-header-row">
-          <h2 class="ws-card-title">Turn-by-turn preview</h2>
-        </div>
-        <ol id="stepsList" class="ws-steps-list"></ol>
-      </div>
     </section>
 
-    <!-- RIGHT: MAP & LEGEND -->
+    <!-- RIGHT: MAP -->
     <section class="ws-map-wrapper">
       <div class="ws-card ws-card--map">
         <div class="ws-card-header-row">
@@ -146,12 +144,12 @@
           </span>
         </div>
         <div id="map" class="ws-map-placeholder">
-          <!-- Map library (Leaflet) will render here -->
           <div class="ws-map-empty-state" id="mapEmptyState">
             <p class="ws-map-empty-title">No route yet</p>
             <p class="ws-map-empty-text">
               Enter a start and destination on the left, then hit
-              <strong>“Generate safe route”</strong> to see the HGV-safe route here.
+              <strong>“Generate safe route”</strong> to see the HGV-safe route
+              here.
             </p>
           </div>
         </div>
@@ -167,7 +165,7 @@
           </div>
           <div class="ws-legend-item">
             <span class="ws-legend-swatch ws-legend-swatch--risk"></span>
-            <span>Low bridge / hazard</span>
+            <span>Low bridge / hazard (coming soon)</span>
           </div>
         </div>
       </div>
@@ -184,6 +182,212 @@
     integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
     crossorigin=""
   ></script>
-  <script src="main.js"></script>
+
+  <script>
+    // ============================
+    // BASIC LEAFLET MAP SETUP
+    // ============================
+    let map;
+    let mainRouteLayer = null;
+
+    function initMap() {
+      map = L.map("map").setView([53.8, -1.6], 6); // UK-ish centre
+
+      L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+        maxZoom: 19,
+        attribution: "&copy; OpenStreetMap contributors",
+      }).addTo(map);
+    }
+
+    function clearRouteLayers() {
+      if (mainRouteLayer) {
+        map.removeLayer(mainRouteLayer);
+        mainRouteLayer = null;
+      }
+    }
+
+    // ============================
+    // STATUS & SUMMARY HELPERS
+    // ============================
+    function setStatus(message) {
+      const el = document.getElementById("routeStatus");
+      el.textContent = message;
+    }
+
+    function showSummary(data) {
+      const card = document.getElementById("routeSummaryCard");
+      const distEl = document.getElementById("summaryDistance");
+      const durEl = document.getElementById("summaryDuration");
+      const startEl = document.getElementById("summaryStart");
+      const endEl = document.getElementById("summaryEnd");
+
+      const route = data.route.routes && data.route.routes[0];
+      if (!route || !route.summary) {
+        card.hidden = true;
+        return;
+      }
+
+      const distanceKm = route.summary.distance / 1000.0;
+      const durationMin = route.summary.duration / 60.0;
+
+      distEl.textContent = distanceKm.toFixed(1) + " km";
+      durEl.textContent = Math.round(durationMin) + " minutes";
+      startEl.textContent = data.start_used || "-";
+      endEl.textContent = data.end_used || "-";
+
+      card.hidden = false;
+    }
+
+    // ============================
+    // POLYLINE DECODER (ORS / Google style)
+    // ============================
+    function decodePolyline(str, precision) {
+      let index = 0,
+        lat = 0,
+        lng = 0,
+        coordinates = [],
+        shift = 0,
+        result = 0,
+        byte = null;
+      const factor = Math.pow(10, precision || 5);
+
+      while (index < str.length) {
+        shift = 0;
+        result = 0;
+
+        do {
+          byte = str.charCodeAt(index++) - 63;
+          result |= (byte & 0x1f) << shift;
+          shift += 5;
+        } while (byte >= 0x20);
+
+        const deltaLat = (result & 1) ? ~(result >> 1) : result >> 1;
+        lat += deltaLat;
+
+        shift = 0;
+        result = 0;
+
+        do {
+          byte = str.charCodeAt(index++) - 63;
+          result |= (byte & 0x1f) << shift;
+          shift += 5;
+        } while (byte >= 0x20);
+
+        const deltaLng = (result & 1) ? ~(result >> 1) : result >> 1;
+        lng += deltaLng;
+
+        coordinates.push([lat / factor, lng / factor]);
+      }
+
+      return coordinates;
+    }
+
+    // ============================
+    // MAIN ROUTE HANDLER
+    // ============================
+    async function handleRouteSubmit(event) {
+      event.preventDefault();
+
+      const startInput = document.getElementById("startInput");
+      const endInput = document.getElementById("endInput");
+      const heightInput = document.getElementById("vehicleHeightInput");
+      const avoidInput = document.getElementById("avoidLowBridgesInput");
+
+      const payload = {
+        start: startInput.value.trim(),
+        end: endInput.value.trim(),
+        vehicle_height_m: parseFloat(heightInput.value),
+        avoid_low_bridges: !!avoidInput.checked,
+      };
+
+      if (!payload.start || !payload.end || isNaN(payload.vehicle_height_m)) {
+        setStatus("Please fill in all fields.");
+        return;
+      }
+
+      clearRouteLayers();
+      setStatus("Requesting safe HGV route from RouteSafe-AI...");
+
+      try {
+        const resp = await fetch("https://routesafe-ai.onrender.com/api/route", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(payload),
+        });
+
+        if (!resp.ok) {
+          const text = await resp.text();
+          console.error("Backend error:", resp.status, text);
+          setStatus(
+            "Could not generate route: backend error " + resp.status + "."
+          );
+          return;
+        }
+
+        const data = await resp.json();
+        console.log("RouteSafe-AI response:", data);
+
+        const routesArr = data.route && data.route.routes;
+        if (!routesArr || !routesArr.length) {
+          setStatus("No route returned from engine.");
+          return;
+        }
+
+        const mainRoute = routesArr[0];
+
+        if (!mainRoute.geometry) {
+          setStatus("Route has no geometry data.");
+          return;
+        }
+
+        // ORS v2 default: encoded polyline, precision 5
+        const coords = decodePolyline(mainRoute.geometry, 5);
+
+        // Convert to Leaflet latlngs
+        const latLngs = coords.map(function (c) {
+          return [c[0], c[1]]; // [lat, lng]
+        });
+
+        mainRouteLayer = L.polyline(latLngs, {
+          color: "#4da3ff",
+          weight: 5,
+        }).addTo(map);
+
+        const bounds = mainRouteLayer.getBounds();
+        map.fitBounds(bounds, { padding: [30, 30] });
+
+        // Hide empty state overlay
+        const emptyState = document.getElementById("mapEmptyState");
+        if (emptyState) {
+          emptyState.style.display = "none";
+        }
+
+        showSummary(data);
+        setStatus("Route generated successfully ✔");
+      } catch (err) {
+        console.error("Error fetching route:", err);
+        setStatus(
+          "Error generating route. Check the API is up and try again."
+        );
+      }
+    }
+
+    // ============================
+    // BOOTSTRAP
+    // ============================
+    document.addEventListener("DOMContentLoaded", function () {
+      initMap();
+
+      const form = document.getElementById("routeForm");
+      form.addEventListener("submit", handleRouteSubmit);
+
+      // Optional: set some defaults for quick testing
+      document.getElementById("startInput").value = "LS27 0BN";
+      document.getElementById("endInput").value = "M31 4QN";
+      document.getElementById("vehicleHeightInput").value = "5.0";
+    });
+  </script>
 </body>
 </html>
