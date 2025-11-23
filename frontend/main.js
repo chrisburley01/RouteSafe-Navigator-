@@ -1,8 +1,9 @@
 // frontend/main.js
 
-// Python API base URL (FastAPI service on Render)
+// ===== CONFIG =====
 const API_BASE = "https://routesafe-navigatorv2.onrender.com";
 
+// ===== MAP SETUP =====
 let map;
 let mainRouteLayer;
 let altRouteLayer;
@@ -11,7 +12,7 @@ let bridgeLayer;
 function initMap() {
   const mapEl = document.getElementById("map");
   if (!mapEl) {
-    console.error("Map container with id 'map' not found.");
+    console.error("Map container #map not found");
     return;
   }
 
@@ -27,46 +28,69 @@ function initMap() {
   bridgeLayer = L.layerGroup().addTo(map);
 }
 
-function setRiskBadge(riskText, riskBadge) {
-  if (!riskBadge) return;
+function renderRouteOnMap(geometry) {
+  if (!map || !mainRouteLayer || !geometry) return;
 
-  riskBadge.textContent = riskText;
-  riskBadge.classList.remove("risk-low", "risk-medium", "risk-high");
+  mainRouteLayer.clearLayers();
+  altRouteLayer.clearLayers();
+  bridgeLayer.clearLayers();
 
-  const normalized = (riskText || "").toLowerCase();
+  if (!geometry.coordinates || geometry.coordinates.length === 0) return;
 
-  if (normalized.includes("low")) {
-    riskBadge.classList.add("risk-low");
-  } else if (normalized.includes("medium")) {
-    riskBadge.classList.add("risk-medium");
-  } else if (normalized.includes("high")) {
-    riskBadge.classList.add("risk-high");
+  const feature = {
+    type: "Feature",
+    geometry,
+    properties: {},
+  };
+
+  mainRouteLayer.addData(feature);
+  try {
+    const bounds = mainRouteLayer.getBounds();
+    if (bounds.isValid()) map.fitBounds(bounds, { padding: [30, 30] });
+  } catch (err) {
+    console.warn("Error fitting bounds:", err);
+  }
+}
+
+// ===== UI HELPERS =====
+function setRiskBadge(text, badgeEl) {
+  if (!badgeEl) return;
+
+  const value = (text || "").toLowerCase();
+  badgeEl.textContent = text || "Unknown";
+
+  badgeEl.classList.remove("risk-low", "risk-medium", "risk-high");
+
+  if (value.includes("low")) {
+    badgeEl.classList.add("risk-low");
+  } else if (value.includes("medium")) {
+    badgeEl.classList.add("risk-medium");
+  } else if (value.includes("high")) {
+    badgeEl.classList.add("risk-high");
   } else {
-    riskBadge.classList.add("risk-low");
+    badgeEl.classList.add("risk-low");
   }
 }
 
-function showError(message, errorBanner, errorText, statusLine) {
-  if (errorText && errorBanner) {
-    errorText.textContent = message;
-    errorBanner.style.display = "block";
-  }
-  if (statusLine) {
-    statusLine.textContent = "Error contacting RouteSafe API.";
-  }
+function showError(msg, errorBanner, errorText, statusLine) {
+  console.error("RouteSafe error:", msg);
+  if (errorText) errorText.textContent = msg;
+  if (errorBanner) errorBanner.style.display = "block";
+  if (statusLine) statusLine.textContent = "Error contacting RouteSafe API.";
 }
 
-function hideError(errorBanner, errorText) {
+function clearError(errorBanner, errorText) {
   if (errorBanner) errorBanner.style.display = "none";
   if (errorText) errorText.textContent = "";
 }
 
+// ===== API CALL =====
 async function callRouteSafeAPI(payload, errorBanner, errorText, statusLine) {
-  hideError(errorBanner, errorText);
+  clearError(errorBanner, errorText);
   if (statusLine) statusLine.textContent = "Contacting RouteSafe API…";
 
   try {
-    const response = await fetch(`${API_BASE}/api/route`, {
+    const res = await fetch(`${API_BASE}/api/route`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -75,153 +99,77 @@ async function callRouteSafeAPI(payload, errorBanner, errorText, statusLine) {
       body: JSON.stringify(payload),
     });
 
-    if (!response.ok) {
+    if (!res.ok) {
       let extra = "";
       try {
-        const errJson = await response.json();
-        if (errJson && errJson.detail) {
-          if (typeof errJson.detail === "string") {
-            extra = errJson.detail;
-          } else {
-            extra = JSON.stringify(errJson.detail);
-          }
+        const body = await res.json();
+        if (body && body.detail) {
+          extra = typeof body.detail === "string" ? body.detail : JSON.stringify(body.detail);
         }
-      } catch (e) {
-        // ignore JSON parse issues
+      } catch (_) {
+        // ignore parse error
       }
-
-      const baseMsg = `Error from RouteSafe API (${response.status})`;
-      const fullMsg = extra ? `${baseMsg}: ${extra}` : `${baseMsg}. Try again or check logs.`;
-      throw new Error(fullMsg);
+      const baseMsg = `Error from RouteSafe API (${res.status})`;
+      const msg = extra ? `${baseMsg}: ${extra}` : `${baseMsg}. Try again or check logs.`;
+      throw new Error(msg);
     }
 
-    const data = await response.json();
+    const data = await res.json();
     return data;
   } catch (err) {
-    console.error("RouteSafe API error", err);
-    showError(err.message || "Unknown error from RouteSafe API.", errorBanner, errorText, statusLine);
+    showError(err.message || "Unknown API error", errorBanner, errorText, statusLine);
     throw err;
   }
 }
 
-function renderRouteOnMap(geometry) {
-  if (!map || !mainRouteLayer || !geometry) return;
-
-  mainRouteLayer.clearLayers();
-  altRouteLayer.clearLayers();
-  bridgeLayer.clearLayers();
-
-  if (!geometry.coordinates || geometry.coordinates.length === 0) {
-    return;
-  }
-
-  const geojson = {
-    type: "Feature",
-    geometry: geometry,
-    properties: {},
-  };
-
-  mainRouteLayer.addData(geojson);
-
-  try {
-    const bounds = mainRouteLayer.getBounds();
-    if (bounds.isValid()) {
-      map.fitBounds(bounds, { padding: [30, 30] });
-    }
-  } catch (e) {
-    console.warn("Error fitting bounds:", e);
-  }
-}
-
-function updateSummaryFromResponse(data, ui) {
-  const {
-    distance_km,
-    duration_min,
-    bridge_risk,
-    nearest_bridge_height_m,
-    nearest_bridge_distance_m,
-  } = data;
-
-  const {
-    distanceValue,
-    timeValue,
-    bridgeRiskValue,
-    nearestBridgeValue,
-    riskBadge,
-    statusLine,
-  } = ui;
-
-  if (distanceValue) {
-    distanceValue.textContent =
-      typeof distance_km === "number" ? `${distance_km.toFixed(1)} km` : "–";
-  }
-
-  if (timeValue) {
-    timeValue.textContent =
-      typeof duration_min === "number" ? `${duration_min.toFixed(0)} min` : "–";
-  }
-
-  if (bridgeRiskValue) {
-    bridgeRiskValue.textContent = bridge_risk || "Unknown";
-  }
-
-  setRiskBadge(bridge_risk || "Unknown", riskBadge);
-
-  if (nearestBridgeValue) {
-    if (nearest_bridge_height_m == null || nearest_bridge_distance_m == null) {
-      nearestBridgeValue.textContent = "None on route";
-    } else {
-      nearestBridgeValue.textContent = `${nearest_bridge_height_m.toFixed(
-        2
-      )} m, ${nearest_bridge_distance_m.toFixed(0)} m away`;
-    }
-  }
-
-  if (statusLine) statusLine.textContent = "Route generated successfully.";
-}
-
-// Wait for DOM *then* wire everything up
+// ===== MAIN WIRING =====
 document.addEventListener("DOMContentLoaded", () => {
+  // Inputs
   const form = document.getElementById("route-form");
   const startInput = document.getElementById("start-postcode");
   const destInput = document.getElementById("dest-postcode");
   const heightInput = document.getElementById("vehicle-height");
   const avoidToggle = document.getElementById("avoid-low-bridges");
 
+  // Status + error
   const errorBanner = document.getElementById("error-banner");
   const errorText = document.getElementById("error-text");
   const statusLine = document.getElementById("status-line");
 
-  const riskBadge = document.getElementById("risk-badge");
+  // Summary
   const distanceValue = document.getElementById("distance-value");
   const timeValue = document.getElementById("time-value");
   const bridgeRiskValue = document.getElementById("bridge-risk-value");
   const nearestBridgeValue = document.getElementById("nearest-bridge-value");
+  const riskBadge = document.getElementById("risk-badge");
 
-  // Initialise map
+  // Button (for spinner text)
+  const submitBtn = document.querySelector("#route-form button[type='submit']");
+
+  // Init map
   initMap();
 
   if (!form) {
-    console.error("Form with id 'route-form' not found – cannot bind submit handler.");
+    console.error("Form #route-form not found - JS not wired.");
     return;
   }
 
-  form.addEventListener("submit", async (evt) => {
-    evt.preventDefault();
-    hideError(errorBanner, errorText);
+  form.addEventListener("submit", async (e) => {
+    e.preventDefault(); // stop page refresh
+    clearError(errorBanner, errorText);
 
     const start = startInput ? startInput.value.trim() : "";
     const dest = destInput ? destInput.value.trim() : "";
-    const vehicleHeightStr = heightInput ? heightInput.value.trim() : "";
+    const heightStr = heightInput ? heightInput.value.trim() : "";
     const avoid = !!(avoidToggle && avoidToggle.checked);
 
-    if (!start || !dest || !vehicleHeightStr) {
-      showError("Please enter start, destination, and vehicle height.", errorBanner, errorText, statusLine);
+    if (!start || !dest || !heightStr) {
+      showError("Please enter start, destination and vehicle height.", errorBanner, errorText, statusLine);
       return;
     }
 
-    const vehicleHeight = parseFloat(vehicleHeightStr);
-    if (Number.isNaN(vehicleHeight) || vehicleHeight <= 0) {
+    const vehicleHeight = parseFloat(heightStr);
+    if (!vehicleHeight || vehicleHeight <= 0) {
       showError("Please enter a valid vehicle height in metres.", errorBanner, errorText, statusLine);
       return;
     }
@@ -233,21 +181,47 @@ document.addEventListener("DOMContentLoaded", () => {
       avoid_low_bridges: avoid,
     };
 
+    if (submitBtn) {
+      submitBtn.disabled = true;
+      submitBtn.textContent = "Planning…";
+    }
     if (statusLine) statusLine.textContent = "Planning route…";
 
     try {
       const result = await callRouteSafeAPI(payload, errorBanner, errorText, statusLine);
-      updateSummaryFromResponse(result, {
-        distanceValue,
-        timeValue,
-        bridgeRiskValue,
-        nearestBridgeValue,
-        riskBadge,
-        statusLine,
-      });
+
+      // Update summary
+      if (distanceValue) {
+        distanceValue.textContent =
+          typeof result.distance_km === "number" ? `${result.distance_km.toFixed(1)} km` : "–";
+      }
+      if (timeValue) {
+        timeValue.textContent =
+          typeof result.duration_min === "number" ? `${result.duration_min.toFixed(0)} min` : "–";
+      }
+      if (bridgeRiskValue) bridgeRiskValue.textContent = result.bridge_risk || "Unknown";
+
+      setRiskBadge(result.bridge_risk || "Unknown", riskBadge);
+
+      if (nearestBridgeValue) {
+        const h = result.nearest_bridge_height_m;
+        const d = result.nearest_bridge_distance_m;
+        if (h == null || d == null) {
+          nearestBridgeValue.textContent = "None on route";
+        } else {
+          nearestBridgeValue.textContent = `${h.toFixed(2)} m, ${d.toFixed(0)} m away`;
+        }
+      }
+
+      if (statusLine) statusLine.textContent = "Route generated successfully.";
       renderRouteOnMap(result.geometry);
     } catch (err) {
-      // error already shown in callRouteSafeAPI
+      // error already displayed
+    } finally {
+      if (submitBtn) {
+        submitBtn.disabled = false;
+        submitBtn.textContent = "Generate safe route";
+      }
     }
   });
 });
