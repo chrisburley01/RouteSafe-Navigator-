@@ -1,127 +1,193 @@
-let map;
-let routeLine;
+// RouteSafe Navigator v1.1 frontend logic
 
-window.onload = () => {
-  map = L.map("map").setView([53.8, -1.6], 9);
+// ✅ Backend endpoint (UI + API on same Render service)
+const API_URL = "/api/route";
 
-  L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-    maxZoom: 18,
-  }).addTo(map);
+// Form + inputs
+const form = document.getElementById("route-form");
+const startInput = document.getElementById("start");
+const destInput = document.getElementById("destination");
+const heightInput = document.getElementById("height");
+const avoidInput = document.getElementById("avoid");
+const submitBtn = document.getElementById("submit-btn");
 
-  document
-    .getElementById("routeForm")
-    .addEventListener("submit", handleRouteRequest);
-};
+// Messages
+const messageBox = document.getElementById("message");
+const messageText = document.getElementById("message-text");
 
-async function handleRouteRequest(event) {
-  event.preventDefault();
+// Summary fields
+const summaryDistance = document.getElementById("summary-distance");
+const summaryTime = document.getElementById("summary-time");
+const summaryBridgeRisk = document.getElementById("summary-bridge-risk");
+const summaryNearest = document.getElementById("summary-nearest");
+const riskChip = document.getElementById("risk-chip");
+const riskLabel = document.getElementById("risk-label");
 
-  const start = document.getElementById("start").value.trim();
-  const end = document.getElementById("end").value.trim();
-  const height = parseFloat(document.getElementById("vehicleHeight").value);
-  const avoid = document.getElementById("avoidLowBridges").checked;
+// Leaflet map
+const map = L.map("map").setView([53.8, -1.6], 6); // UK view
+L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+  maxZoom: 19,
+  attribution: "&copy; OpenStreetMap contributors"
+}).addTo(map);
 
-  const status = document.getElementById("routeStatus");
-  status.textContent = "Requesting route…";
+let routeLayer = null;
 
-  const payload = {
-    start: start,
-    end: end,
-    vehicle_height_m: height,
-    avoid_low_bridges: avoid,
-  };
+// --- UI helpers ---
 
-  try {
-    const res = await fetch("https://routesafe-ai.onrender.com/api/route", {
-      method: "POST",
-      headers: {"Content-Type": "application/json"},
-      body: JSON.stringify(payload),
-    });
+function setMessage(text, type = "info") {
+  if (!text) {
+    messageBox.classList.remove("visible", "error", "info");
+    messageText.textContent = "";
+    return;
+  }
+  messageBox.classList.add("visible");
+  messageBox.classList.remove("error", "info");
+  messageBox.classList.add(type);
+  messageText.textContent = text;
+}
 
-    const data = await res.json();
+function setRiskLevel(level) {
+  riskChip.classList.remove("primary", "low", "medium", "high");
+  riskChip.classList.add(level);
 
-    if (!res.ok) {
-      status.textContent = "Error: " + data.detail;
-      return;
+  const dot = riskChip.querySelector(".badge-risk-dot");
+  riskLabel.textContent =
+    level === "high" ? "High risk" : level === "medium" ? "Medium risk" : "Low risk";
+
+  if (level === "low") {
+    riskChip.classList.add("primary");
+  }
+}
+
+function formatKm(km) {
+  if (km === undefined || km === null) return "–";
+  if (km < 1) return `${(km * 1000).toFixed(0)} m`;
+  return `${km.toFixed(1)} km`;
+}
+
+function formatMinutes(mins) {
+  if (mins === undefined || mins === null) return "–";
+  if (mins < 60) return `${Math.round(mins)} min`;
+  const h = Math.floor(mins / 60);
+  const m = Math.round(mins % 60);
+  return m ? `${h} hr ${m} min` : `${h} hr`;
+}
+
+function formatBridgeRisk(result) {
+  if (!result || !Array.isArray(result.conflicts)) {
+    return "No data";
+  }
+  const count = result.conflicts.length;
+  if (count === 0) return "No low-bridge conflicts detected";
+  if (count === 1) return "1 low-bridge conflict";
+  return `${count} low-bridge conflicts`;
+}
+
+function formatNearestBridge(nb) {
+  if (!nb) return "None on route";
+  const h = nb.height_m != null ? `${nb.height_m.toFixed(2)} m` : "unknown height";
+  const d =
+    nb.distance_m != null
+      ? nb.distance_m > 1000
+        ? `${(nb.distance_m / 1000).toFixed(1)} km`
+        : `${Math.round(nb.distance_m)} m`
+      : "unknown distance";
+  return `${h} · ${d} ahead`;
+}
+
+function drawRoute(geojson) {
+  if (!geojson) return;
+  if (routeLayer) {
+    map.removeLayer(routeLayer);
+  }
+  routeLayer = L.geoJSON(geojson, {
+    style: {
+      weight: 5,
+      opacity: 0.9
     }
-
-    status.textContent = "Route loaded.";
-
-    drawRouteOnMap(data);
-    populateSummary(data);
-    populateWarnings(data);
-
-  } catch (err) {
-    status.textContent = "Network error: " + err;
+  }).addTo(map);
+  try {
+    map.fitBounds(routeLayer.getBounds(), { padding: [20, 20] });
+  } catch {
+    // ignore
   }
 }
 
-// ----- DRAW ROUTE -----
+// --- Form submit handler ---
 
-function drawRouteOnMap(data) {
-  const coords = data.route.routes[0].geometry.coordinates;
+async function handleSubmit(event) {
+  event.preventDefault();
+  setMessage("");
 
-  const latlngs = coords.map(c => [c[1], c[0]]);
+  const start = startInput.value.trim();
+  const dest = destInput.value.trim();
+  const heightVal = parseFloat(heightInput.value);
 
-  if (routeLine) routeLine.remove();
-
-  routeLine = L.polyline(latlngs, { color: "#002c77", weight: 4 }).addTo(map);
-
-  map.fitBounds(routeLine.getBounds(), { padding: [40, 40] });
-}
-
-// ----- SUMMARY PANEL -----
-
-function populateSummary(data) {
-  document.getElementById("summaryCard").hidden = false;
-
-  document.getElementById("sumDistance").textContent =
-    (data.route_metrics.distance_km || 0).toFixed(2) + " km";
-
-  document.getElementById("sumTime").textContent =
-    (data.route_metrics.duration_min || 0).toFixed(0) + " min";
-
-  const risk = data.bridge_summary.has_conflict
-    ? "HIGH"
-    : data.bridge_summary.near_height_limit
-    ? "MEDIUM"
-    : "LOW";
-
-  document.getElementById("sumRisk").textContent = risk;
-
-  const nb = data.bridge_summary.nearest_bridge;
-  if (nb) {
-    document.getElementById("sumNearest").textContent =
-      `${nb.height_m}m (${data.bridge_summary.nearest_distance_m.toFixed(0)}m away)`;
-  } else {
-    document.getElementById("sumNearest").textContent = "No bridges near route";
-  }
-}
-
-// ----- WARNINGS PANEL -----
-
-function populateWarnings(data) {
-  const warningsCard = document.getElementById("warningsCard");
-  const list = document.getElementById("warningsList");
-
-  list.innerHTML = "";
-
-  if (!data.bridge_summary.has_conflict && !data.bridge_summary.near_height_limit) {
-    warningsCard.hidden = true;
+  if (!start || !dest || !heightVal || Number.isNaN(heightVal)) {
+    setMessage("Please enter start, destination and a valid vehicle height.", "error");
     return;
   }
 
-  warningsCard.hidden = false;
+  submitBtn.disabled = true;
+  submitBtn.textContent = "Planning route…";
 
-  if (data.bridge_summary.has_conflict) {
-    const li = document.createElement("li");
-    li.textContent = "⚠️ Low bridge on route – NOT SAFE at current height";
-    list.appendChild(li);
-  }
+  try {
+    const payload = {
+      start,
+      destination: dest,
+      vehicle_height_m: heightVal,
+      avoid_low_bridges: !!avoidInput.checked
+    };
 
-  if (data.bridge_summary.near_height_limit) {
-    const li = document.createElement("li");
-    li.textContent = "⚠️ Bridge height close to vehicle limit – use caution";
-    list.appendChild(li);
+    const resp = await fetch(API_URL, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify(payload)
+    });
+
+    if (!resp.ok) {
+      const txt = await resp.text();
+      throw new Error(`Server responded ${resp.status}: ${txt || resp.statusText}`);
+    }
+
+    const data = await resp.json();
+
+    // Expecting: { distance_km, duration_min, risk_level, bridge_result, nearest_bridge, route_geojson }
+    summaryDistance.textContent = formatKm(data.distance_km);
+    summaryTime.textContent = formatMinutes(data.duration_min);
+    summaryBridgeRisk.textContent = formatBridgeRisk(data.bridge_result);
+    summaryNearest.textContent = formatNearestBridge(data.nearest_bridge);
+
+    setRiskLevel(data.risk_level || "low");
+
+    if (data.route_geojson) {
+      drawRoute(data.route_geojson);
+    }
+
+    setMessage("Route generated successfully.", "info");
+  } catch (err) {
+    console.error(err);
+    setMessage(
+      "Network error: " +
+        (err.message && err.message.includes("Failed to fetch")
+          ? "Unable to reach RouteSafe engine. Check API URL and server status."
+          : err.message),
+      "error"
+    );
+  } finally {
+    submitBtn.disabled = false;
+    submitBtn.textContent = "Generate Safe Route";
   }
 }
+
+// --- Wire up form & defaults ---
+
+form.addEventListener("submit", handleSubmit);
+
+// Pre-fill useful demo values
+startInput.value = "LS27 0BN";
+destInput.value = "HD5 0RL";
+heightInput.value = "5";
+avoidInput.checked = true;
