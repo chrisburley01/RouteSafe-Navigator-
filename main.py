@@ -1,223 +1,134 @@
-# main.py
-#
-# RouteSafe Navigator backend
-# FastAPI + OpenRouteService + UK low-bridge engine
+# main.py – RouteSafe Navigator backend (Render)
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-from typing import Optional
-
 import os
-import requests
+import openrouteservice
 
-from bridge_engine import BridgeEngine
+from bridge_engine import BridgeEngine, BridgeCheckResult
 
+app = FastAPI(title="RouteSafe Navigator API", version="1.0")
 
-# -----------------------------------------------------------------------------
-# FastAPI app + CORS
-# -----------------------------------------------------------------------------
-
-app = FastAPI(title="RouteSafe Navigator Backend", version="1.0.0")
-
+# Allow the static frontend domains
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],        # lock down later if you want
+    allow_origins=["*"],  # you can lock this down later
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# -----------------------------------------------------------------------------
-# Config
-# -----------------------------------------------------------------------------
-
-ORS_API_KEY = os.getenv("ORS_API_KEY")
-
-if not ORS_API_KEY:
-    # It will still start, but any route call will fail with a clear error
-    print("⚠️  WARNING: ORS_API_KEY environment variable is NOT set.")
+# Lazily init engine so a CSV issue doesn’t blow up startup
+_bridge_engine: BridgeEngine | None = None
+_ors_client: openrouteservice.Client | None = None
 
 
-# Bridge engine (loads CSV once on startup)
-bridge_engine = BridgeEngine(
-    csv_path="bridge_heights_clean.csv",
-    search_radius_m=300.0,
-    conflict_clearance_m=0.0,
-    near_clearance_m=0.25,
-)
+def get_bridge_engine() -> BridgeEngine:
+    global _bridge_engine
+    if _bridge_engine is None:
+        _bridge_engine = BridgeEngine()  # uses auto CSV locator
+    return _bridge_engine
 
 
-# -----------------------------------------------------------------------------
-# Models
-# -----------------------------------------------------------------------------
+def get_ors_client() -> openrouteservice.Client:
+    global _ors_client
+    if _ors_client is None:
+        api_key = os.getenv("ORS_API_KEY")
+        if not api_key:
+            raise RuntimeError("ORS_API_KEY environment variable not set")
+        _ors_client = openrouteservice.Client(key=api_key)
+    return _ors_client
+
 
 class RouteRequest(BaseModel):
-    start: str                # UK postcode or address
-    destination: str
+    start_postcode: str
+    dest_postcode: str
     vehicle_height_m: float
     avoid_low_bridges: bool = True
-
-
-class NearestBridge(BaseModel):
-    lat: float
-    lon: float
-    height_m: float
-    distance_m: float
 
 
 class RouteResponse(BaseModel):
     distance_km: float
     duration_min: float
-    risk_level: str
-    bridge_result: dict
-    nearest_bridge: Optional[NearestBridge]
-    route_geojson: dict
+    bridge_risk: str
+    nearest_bridge_height_m: float | None
+    nearest_bridge_distance_m: float | None
+    geometry: dict
 
-
-# -----------------------------------------------------------------------------
-# Helpers – ORS
-# -----------------------------------------------------------------------------
-
-def _require_ors_key():
-    if not ORS_API_KEY:
-        raise HTTPException(
-            status_code=500,
-            detail="ORS_API_KEY is not configured on the server."
-        )
-
-
-def geocode(postcode: str):
-    """
-    Geocode a UK postcode using ORS.
-    Returns (lat, lon).
-    """
-    _require_ors_key()
-
-    url = "https://api.openrouteservice.org/geocode/search"
-    params = {
-        "api_key": ORS_API_KEY,
-        "text": postcode,
-        "boundary.country": "GBR",
-    }
-
-    try:
-        r = requests.get(url, params=params, timeout=15)
-    except requests.RequestException as e:
-        raise HTTPException(status_code=502, detail=f"Geocoding request failed: {e}")
-
-    if r.status_code != 200:
-        raise HTTPException(status_code=502, detail=f"Geocoding failed: {r.text}")
-
-    data = r.json()
-    features = data.get("features", [])
-    if not features:
-        raise HTTPException(status_code=400, detail=f"Could not geocode: {postcode}")
-
-    coords = features[0]["geometry"]["coordinates"]  # [lon, lat]
-    return coords[1], coords[0]
-
-
-def ors_route(lat1: float, lon1: float, lat2: float, lon2: float) -> dict:
-    """
-    Request an HGV route from ORS.
-    Returns the JSON response.
-    """
-    _require_ors_key()
-
-    url = "https://api.openrouteservice.org/v2/directions/driving-hgv"
-    headers = {"Authorization": ORS_API_KEY}
-    body = {
-        "coordinates": [
-            [lon1, lat1],
-            [lon2, lat2],
-        ]
-    }
-
-    try:
-        r = requests.post(url, json=body, headers=headers, timeout=30)
-    except requests.RequestException as e:
-        raise HTTPException(status_code=502, detail=f"Routing request failed: {e}")
-
-    if r.status_code != 200:
-        raise HTTPException(status_code=502, detail=f"Routing failed: {r.text}")
-
-    return r.json()
-
-
-# -----------------------------------------------------------------------------
-# Routes
-# -----------------------------------------------------------------------------
 
 @app.get("/")
 def root():
-    """
-    Simple health endpoint – DOES NOT try to serve index.html.
-    """
-    return {"status": "ok", "service": "routesafe-backend"}
-
-
-@app.get("/health")
-def health():
-    return {"ok": True}
+    return {"status": "ok", "service": "RouteSafe Navigator API"}
 
 
 @app.post("/api/route", response_model=RouteResponse)
 def plan_route(req: RouteRequest):
-    """
-    Main routing endpoint used by the frontend.
-    """
-    # 1) Geocode start + destination
-    lat1, lon1 = geocode(req.start)
-    lat2, lon2 = geocode(req.destination)
+    try:
+        engine = get_bridge_engine()
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"BridgeEngine error: {e}")
 
-    # 2) Request HGV route from ORS
-    ors_data = ors_route(lat1, lon1, lat2, lon2)
+    try:
+        ors = get_ors_client()
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"ORS client error: {e}")
 
-    feature = ors_data["features"][0]
-    summary = feature["properties"]["summary"]
-    geometry = feature["geometry"]
+    # Geocode postcodes via ORS
+    try:
+        start = ors.pelias_search(text=req.start_postcode)["features"][0]["geometry"]["coordinates"]
+        dest = ors.pelias_search(text=req.dest_postcode)["features"][0]["geometry"]["coordinates"]
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Error geocoding postcodes: {e}")
 
-    distance_km = summary.get("distance", 0.0) / 1000.0
-    duration_min = summary.get("duration", 0.0) / 60.0
+    # ORS uses [lon, lat]
+    start_lon, start_lat = start
+    dest_lon, dest_lat = dest
 
-    # 3) Bridge check along the leg (start → end).
-    #    (Simple leg check – we can later upgrade to follow the polyline.)
-    bridge_result = bridge_engine.check_leg(
-        (lat1, lon1),
-        (lat2, lon2),
-        req.vehicle_height_m,
+    # Get a route from ORS
+    try:
+        route = ors.directions(
+           coordinates=[start, dest],
+           profile="driving-hgv",
+           format="geojson",
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error getting route from ORS: {e}")
+
+    feat = route["features"][0]
+    props = feat["properties"]
+    distance_km = props["segments"][0]["distance"] / 1000.0
+    duration_min = props["segments"][0]["duration"] / 60.0
+
+    # For now we just check the straight line leg start→end with BridgeEngine
+    check: BridgeCheckResult = engine.check_leg_for_bridges(
+        start_lat=start_lat,
+        start_lon=start_lon,
+        end_lat=dest_lat,
+        end_lon=dest_lon,
+        vehicle_height_m=req.vehicle_height_m,
     )
 
-    nearest_bridge = None
-    if bridge_result.nearest_bridge is not None:
-        nearest_bridge = NearestBridge(
-            lat=bridge_result.nearest_bridge.lat,
-            lon=bridge_result.nearest_bridge.lon,
-            height_m=bridge_result.nearest_bridge.height_m,
-            distance_m=bridge_result.nearest_distance_m or 0.0,
-        )
-
-    # Determine overall risk level
-    if bridge_result.has_conflict:
-        risk_level = "high"
-    elif bridge_result.near_height_limit:
-        risk_level = "medium"
+    if check.has_conflict and req.avoid_low_bridges:
+        risk = "conflict"
+    elif check.near_height_limit:
+        risk = "near-limit"
     else:
-        risk_level = "low"
+        risk = "low"
 
-    bridge_result_dict = {
-        "has_conflict": bridge_result.has_conflict,
-        "near_height_limit": bridge_result.near_height_limit,
-        # Placeholder for future detailed conflict list
-        "conflicts": [],
-    }
+    nearest_height = check.nearest_bridge.height_m if check.nearest_bridge else None
 
     return RouteResponse(
         distance_km=distance_km,
         duration_min=duration_min,
-        risk_level=risk_level,
-        bridge_result=bridge_result_dict,
-        nearest_bridge=nearest_bridge,
-        route_geojson=geometry,
+        bridge_risk=risk,
+        nearest_bridge_height_m=nearest_height,
+        nearest_bridge_distance_m=check.nearest_distance_m,
+        geometry=feat["geometry"],
     )
+
+
+# Uvicorn entry point for Render
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run("main:app", host="0.0.0.0", port=10000, reload=True)
