@@ -35,19 +35,28 @@ class BridgeEngine:
         conflict_clearance_m: float = 0.0,
         near_clearance_m: float = 0.25,
     ):
-        # Try CSV first, then Excel, then Latin-1 fallback
+        """
+        Load CSV or Excel safely.
+        Render sometimes corrupts UTF-8 CSVs, so we fall back to Excel or Latin-1.
+        """
         try:
+            # Normal UTF-8 CSV
             self.df = pd.read_csv(csv_path)
         except Exception:
             try:
+                # Excel (xlsx)
                 self.df = pd.read_excel(csv_path)
             except Exception:
+                # CSV with Latin-1 (common render fallback)
                 self.df = pd.read_csv(csv_path, encoding="latin1")
 
         self.search_radius_m = search_radius_m
         self.conflict_clearance_m = conflict_clearance_m
         self.near_clearance_m = near_clearance_m
 
+    # ---------------------------------------------------------------------
+    # Distance calculation: haversine in metres
+    # ---------------------------------------------------------------------
     def haversine(self, lat1, lon1, lat2, lon2):
         phi1, phi2 = map(math.radians, [lat1, lat2])
         dphi = phi2 - phi1
@@ -56,8 +65,12 @@ class BridgeEngine:
         a = (math.sin(dphi / 2) ** 2 +
              math.cos(phi1) * math.cos(phi2) *
              math.sin(dlambda / 2) ** 2)
+
         return EARTH_RADIUS_M * 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
 
+    # ---------------------------------------------------------------------
+    # Check a single route leg for low-bridge risk
+    # ---------------------------------------------------------------------
     def check_leg(self, start, end, vehicle_height_m):
         lat1, lon1 = start
         lat2, lon2 = end
@@ -74,17 +87,22 @@ class BridgeEngine:
                 height_m=float(row["height_m"])
             )
 
+            # Distance to each end of the leg
             d1 = self.haversine(lat1, lon1, b.lat, b.lon)
             d2 = self.haversine(lat2, lon2, b.lat, b.lon)
             d = min(d1, d2)
 
+            # Track nearest bridge
             if nearest_dist is None or d < nearest_dist:
                 nearest_dist = d
                 nearest_bridge = b
 
+            # Check risk zone
             if d <= self.search_radius_m:
+                # Actual conflict
                 if vehicle_height_m > b.height_m - self.conflict_clearance_m:
                     has_conflict = True
+                # Near limit warning
                 elif vehicle_height_m > b.height_m - self.near_clearance_m:
                     near_limit = True
 
