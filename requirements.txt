@@ -1,4 +1,7 @@
 fastapi
 uvicorn[standard]
+pydantic
 requests
 pandas
+numpy
+python-multipart
