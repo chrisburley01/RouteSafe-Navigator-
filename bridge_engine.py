@@ -6,6 +6,7 @@
 from dataclasses import dataclass
 from typing import Optional, List, Tuple
 from pathlib import Path
+import os
 import math
 import pandas as pd
 
@@ -13,6 +14,13 @@ EARTH_RADIUS_M = 6371000.0  # metres
 
 # Absolute directory of this file (bridge_engine.py)
 BASE_DIR = Path(__file__).resolve().parent
+
+# 🔍 DEBUG: list files Render can see in this folder on startup
+print("DEBUG BASE_DIR:", BASE_DIR)
+try:
+    print("DEBUG FILES:", os.listdir(BASE_DIR))
+except Exception as e:
+    print("DEBUG ERROR listing BASE_DIR:", e)
 
 
 @dataclass
@@ -46,11 +54,13 @@ class BridgeEngine:
         conflict_clearance_m: float = 0.0,
         near_clearance_m: float = 0.25,
     ):
-        # If no path given, assume bridge_heights_clean.csv
+        # If no path given, assume bridge_heights_clean.csv in same folder
         if csv_path is None:
             csv_path = BASE_DIR / "bridge_heights_clean.csv"
         else:
             csv_path = BASE_DIR / csv_path
+
+        print("DEBUG CSV PATH:", csv_path)
 
         # Load the cleaned CSV (now a real CSV)
         self.df = pd.read_csv(csv_path)
@@ -59,7 +69,8 @@ class BridgeEngine:
         self.conflict_clearance_m = conflict_clearance_m
         self.near_clearance_m = near_clearance_m
 
-    # Haversine helpers
+    # --- Haversine helpers ---
+
     def _deg2rad(self, deg: float) -> float:
         return deg * math.pi / 180.0
 
@@ -87,6 +98,8 @@ class BridgeEngine:
         """
         return (lat1 + (lat2 - lat1) * t, lon1 + (lon2 - lon1) * t)
 
+    # --- Core check ---
+
     def check_leg_for_bridges(
         self,
         start_lat: float,
@@ -105,7 +118,9 @@ class BridgeEngine:
         samples: List[Tuple[float, float]] = []
         for i in range(num_samples + 1):
             t = i / num_samples
-            samples.append(self._project_point_fraction(start_lat, start_lon, end_lat, end_lon, t))
+            samples.append(
+                self._project_point_fraction(start_lat, start_lon, end_lat, end_lon, t)
+            )
 
         has_conflict = False
         near_height_limit = False
