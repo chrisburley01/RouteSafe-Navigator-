@@ -1,17 +1,17 @@
-from pathlib import Path
-from typing import Optional, List, Literal
-
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
-from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
+import requests
+import os
+import json
 
-BASE_DIR = Path(__file__).resolve().parent
+from bridge_engine import BridgeEngine
 
-app = FastAPI(title="RouteSafe Navigator API")
+app = FastAPI()
 
-# --- CORS ---
+# ------------------------------------------------------------------------------
+# CORS – allow static site to call backend
+# ------------------------------------------------------------------------------
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -20,185 +20,131 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# --- Static files / SPA routes ---
-
-assets_dir = BASE_DIR / "assets"
-assets_dir.mkdir(exist_ok=True)
-
-@app.get("/", include_in_schema=False)
-async def serve_index() -> FileResponse:
-    index_path = BASE_DIR / "index.html"
-    if not index_path.exists():
-        raise HTTPException(status_code=404, detail="index.html not found")
-    return FileResponse(index_path)
+# ------------------------------------------------------------------------------
+# ORS API KEY
+# ------------------------------------------------------------------------------
+ORS_API_KEY = os.getenv("ORS_API_KEY")
+if not ORS_API_KEY:
+    print("WARNING: ORS_API_KEY is not set!")
 
 
-@app.get("/style.css", include_in_schema=False)
-async def serve_css() -> FileResponse:
-    css_path = BASE_DIR / "style.css"
-    if not css_path.exists():
-        raise HTTPException(status_code=404, detail="style.css not found")
-    return FileResponse(css_path)
+# ------------------------------------------------------------------------------
+# Bridge engine
+# ------------------------------------------------------------------------------
+bridge_engine = BridgeEngine(
+    csv_path="bridge_heights_clean.csv",
+    search_radius_m=300,
+    conflict_clearance_m=0.0,
+    near_clearance_m=0.25,
+)
 
 
-@app.get("/main.js", include_in_schema=False)
-async def serve_js() -> FileResponse:
-    js_path = BASE_DIR / "main.js"
-    if not js_path.exists():
-        raise HTTPException(status_code=404, detail="main.js not found")
-    return FileResponse(js_path)
-
-
-app.mount("/assets", StaticFiles(directory=assets_dir), name="assets")
-
-
-# --- API models ---
-
+# ------------------------------------------------------------------------------
+# Input model
+# ------------------------------------------------------------------------------
 class RouteRequest(BaseModel):
     start: str
-    end: str
+    destination: str
     vehicle_height_m: float
     avoid_low_bridges: bool = True
 
 
-class BridgeRisk(BaseModel):
-    level: Literal["low", "medium", "high"]
-    status_text: str
-    nearest_bridge_height_m: Optional[float] = None
-    nearest_bridge_distance_m: Optional[float] = None
+# ------------------------------------------------------------------------------
+# Health check
+# ------------------------------------------------------------------------------
+@app.get("/")
+def root():
+    return {"status": "ok", "service": "routesafe-backend"}
 
 
-class WarningItem(BaseModel):
-    level: Literal["low", "medium", "high"] = "low"
-    message: str
+# ------------------------------------------------------------------------------
+# ORS geocode helper
+# ------------------------------------------------------------------------------
+def geocode(postcode: str):
+    url = "https://api.openrouteservice.org/geocode/search"
+    params = {"api_key": ORS_API_KEY, "text": postcode, "boundary.country": "GBR"}
+    r = requests.get(url, params=params, timeout=15)
+    data = r.json()
+
+    if "features" not in data or not data["features"]:
+        raise HTTPException(status_code=400, detail=f"Could not geocode: {postcode}")
+
+    coords = data["features"][0]["geometry"]["coordinates"]
+    return coords[1], coords[0]  # lat, lon
 
 
-class StepItem(BaseModel):
-    instruction: str
-
-
-class LineString(BaseModel):
-    type: Literal["LineString"] = "LineString"
-    coordinates: List[List[float]]  # [lon, lat]
-
-
-class BridgeMarker(BaseModel):
-    lat: float
-    lon: float
-    height_m: Optional[float] = None
-    risk_level: Literal["low", "medium", "high"] = "low"
-    message: Optional[str] = None
-
-
-class RouteSummary(BaseModel):
-    distance_km: float
-    duration_min: float
-
-
-class RouteResponse(BaseModel):
-    summary: RouteSummary
-    distance_km: float
-    duration_min: float
-    bridge_risk: BridgeRisk
-    warnings: List[WarningItem] = []
-    steps: List[StepItem] = []
-    geometry: Optional[LineString] = None
-    alt_geometry: Optional[LineString] = None
-    bridge_markers: List[BridgeMarker] = []
-
-
-# --- API endpoint ---
-
-@app.post("/api/route", response_model=RouteResponse)
-async def api_route(req: RouteRequest) -> RouteResponse:
-    if req.vehicle_height_m <= 0:
-        raise HTTPException(status_code=400, detail="Vehicle height must be > 0")
-
-    # For now return demo; we’ll plug real ORS+BridgeEngine later.
-    return build_demo_route(req.start, req.end, req.vehicle_height_m)
-
-
-# --- Demo route (matches frontend expectations) ---
-
-def build_demo_route(start: str, end: str, vehicle_height_m: float) -> RouteResponse:
-    high_risk = vehicle_height_m > 4.8
-
-    demo_line = LineString(
-        coordinates=[
-            [-1.602, 53.758],
-            [-1.55, 53.75],
-            [-1.48, 53.74],
-            [-1.35, 53.73],
-            [-2.25, 53.48],
+# ------------------------------------------------------------------------------
+# ORS routing helper
+# ------------------------------------------------------------------------------
+def ors_route(lat1, lon1, lat2, lon2):
+    url = "https://api.openrouteservice.org/v2/directions/driving-hgv"
+    headers = {"Authorization": ORS_API_KEY}
+    body = {
+        "coordinates": [
+            [lon1, lat1],
+            [lon2, lat2]
         ]
+    }
+
+    r = requests.post(url, json=body, headers=headers, timeout=20)
+    if r.status_code != 200:
+        print("ORS error:", r.text)
+        raise HTTPException(status_code=500, detail="ORS routing failed")
+
+    return r.json()
+
+
+# ------------------------------------------------------------------------------
+# Main routing endpoint
+# ------------------------------------------------------------------------------
+@app.post("/api/route")
+def route(req: RouteRequest):
+    # Geocode
+    lat1, lon1 = geocode(req.start)
+    lat2, lon2 = geocode(req.destination)
+
+    # Route from ORS
+    ors = ors_route(lat1, lon1, lat2, lon2)
+
+    summary = ors["features"][0]["properties"]["summary"]
+    geometry = ors["features"][0]["geometry"]
+
+    distance_km = summary.get("distance", 0) / 1000.0
+    duration_min = summary.get("duration", 0) / 60.0
+
+    # Bridge checks along straight line (start → end)
+    bridge_result = bridge_engine.check_leg(
+        (lat1, lon1),
+        (lat2, lon2),
+        req.vehicle_height_m
     )
 
-    alt_line: Optional[LineString] = None
-    if high_risk:
-        alt_line = LineString(
-            coordinates=[
-                [-1.602, 53.758],
-                [-1.62, 53.72],
-                [-1.7, 53.68],
-                [-1.9, 53.58],
-                [-2.25, 53.48],
-            ]
-        )
+    nearest_bridge = None
+    if bridge_result.nearest_bridge:
+        nearest_bridge = {
+            "lat": bridge_result.nearest_bridge.lat,
+            "lon": bridge_result.nearest_bridge.lon,
+            "height_m": bridge_result.nearest_bridge.height_m,
+            "distance_m": bridge_result.nearest_distance_m,
+        }
 
-    bridge_markers: List[BridgeMarker] = []
-    warnings: List[WarningItem] = []
+    # Risk level logic
+    if bridge_result.has_conflict:
+        risk_level = "high"
+    elif bridge_result.near_height_limit:
+        risk_level = "medium"
+    else:
+        risk_level = "low"
 
-    if high_risk:
-        bridge_markers.append(
-            BridgeMarker(
-                lat=53.74,
-                lon=-1.5,
-                height_m=4.6,
-                risk_level="high",
-                message="Low bridge 4.6 m – main route diverted.",
-            )
-        )
-        warnings.append(
-            WarningItem(
-                level="high",
-                message="Low bridge (4.6 m) detected near Morley; main route diverted.",
-            )
-        )
-
-    bridge_risk = BridgeRisk(
-        level="high" if high_risk else "low",
-        status_text=(
-            "Low bridge on direct path; alternative offered."
-            if high_risk
-            else "No conflicts detected for this height."
-        ),
-        nearest_bridge_height_m=4.6 if high_risk else 5.2,
-        nearest_bridge_distance_m=130.0,
-    )
-
-    summary = RouteSummary(distance_km=27.3, duration_min=42.0)
-
-    steps = [
-        StepItem(instruction=f"Start at {start}"),
-        StepItem(instruction="Head towards M62 via A650."),
-        StepItem(
-            instruction=(
-                "Follow HGV diversion avoiding low bridge near Morley."
-                if high_risk
-                else "Follow primary route through Morley."
-            )
-        ),
-        StepItem(instruction=f"Arrive at {end}."),
-    ]
-
-    return RouteResponse(
-        summary=summary,
-        distance_km=summary.distance_km,
-        duration_min=summary.duration_min,
-        bridge_risk=bridge_risk,
-        warnings=warnings,
-        steps=steps,
-        geometry=demo_line,
-        alt_geometry=alt_line,
-        bridge_markers=bridge_markers,
-    )
+    return {
+        "distance_km": distance_km,
+        "duration_min": duration_min,
+        "risk_level": risk_level,
+        "bridge_result": {
+            "has_conflict": bridge_result.has_conflict,
+            "near_height_limit": bridge_result.near_height_limit,
+            "conflicts": []  # future: provide detailed conflicts
+        },
+        "nearest_bridge": nearest_bridge,
+        "route_geojson": geometry
+    }
