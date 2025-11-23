@@ -32,8 +32,11 @@ class BridgeEngine:
     """
     Loads low-bridge data and checks route legs for conflicts.
 
-    Expects CSV with columns:
-        lat, lon, height_m
+    Accepts either:
+      - CSV file with columns: lat, lon, height_m
+      - or XLSX Excel file with the same columns
+
+    This makes it tolerant to how the file was saved.
     """
 
     def __init__(
@@ -43,19 +46,25 @@ class BridgeEngine:
         conflict_clearance_m: float = 0.0,
         near_clearance_m: float = 0.25,
     ):
-        # Robust CSV load – handle non-UTF8 files (e.g. Windows-1252 / latin1)
+        # Robust load: try CSV, then Excel, then latin1 CSV
         try:
+            # Normal UTF-8 CSV
             self.df = pd.read_csv(csv_path)
-        except UnicodeDecodeError:
-            self.df = pd.read_csv(csv_path, encoding="latin1")
+        except (UnicodeDecodeError, pd.errors.ParserError, OSError):
+            try:
+                # Many "csv" uploads are actually .xlsx files
+                self.df = pd.read_excel(csv_path)
+            except Exception:
+                # Last resort: try latin1 CSV
+                self.df = pd.read_csv(csv_path, encoding="latin1")
 
         self.search_radius_m = search_radius_m
         self.conflict_clearance_m = conflict_clearance_m
         self.near_clearance_m = near_clearance_m
 
-    # -------------------------------------------------------------------------
+    # ---------------------------------------------------------------------
     # Haversine distance in metres
-    # -------------------------------------------------------------------------
+    # ---------------------------------------------------------------------
     def haversine(self, lat1: float, lon1: float, lat2: float, lon2: float) -> float:
         phi1, phi2 = math.radians(lat1), math.radians(lat2)
         dphi = phi2 - phi1
@@ -67,9 +76,9 @@ class BridgeEngine:
         )
         return EARTH_RADIUS_M * 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
 
-    # -------------------------------------------------------------------------
+    # ---------------------------------------------------------------------
     # Check a leg from start → end for nearby low bridges
-    # -------------------------------------------------------------------------
+    # ---------------------------------------------------------------------
     def check_leg(self, start, end, vehicle_height_m: float) -> BridgeCheckResult:
         lat1, lon1 = start
         lat2, lon2 = end
@@ -91,7 +100,7 @@ class BridgeEngine:
             dist2 = self.haversine(lat2, lon2, b.lat, b.lon)
             d = min(dist1, dist2)
 
-            # Update nearest bridge
+            # Track nearest bridge
             if nearest_distance is None or d < nearest_distance:
                 nearest_distance = d
                 nearest_bridge = b
