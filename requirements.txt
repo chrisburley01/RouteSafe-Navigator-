@@ -1,8 +1,5 @@
 fastapi
 uvicorn[standard]
-pydantic
-requests
 pandas
-numpy
-python-multipart
-orjson
+openrouteservice
+python-dotenv
