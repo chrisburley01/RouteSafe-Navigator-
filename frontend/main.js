@@ -1,7 +1,7 @@
 // RouteSafe Navigator v1.1 frontend logic
 
-// ✅ Backend endpoint (UI + API on same Render service)
-const API_URL = "/api/route";
+// ✅ Backend endpoint (Python service on Render)
+const API_URL = "https://routesafe-navigatorv2.onrender.com/api/route";
 
 // Form + inputs
 const form = document.getElementById("route-form");
@@ -24,7 +24,7 @@ const riskChip = document.getElementById("risk-chip");
 const riskLabel = document.getElementById("risk-label");
 
 // Leaflet map
-const map = L.map("map").setView([53.8, -1.6], 6); // UK view
+const map = L.map("map").setView([53.8, -1.6], 6); // UK default view
 L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
   maxZoom: 19,
   attribution: "&copy; OpenStreetMap contributors"
@@ -35,6 +35,7 @@ let routeLayer = null;
 // --- UI helpers ---
 
 function setMessage(text, type = "info") {
+  if (!messageBox || !messageText) return;
   if (!text) {
     messageBox.classList.remove("visible", "error", "info");
     messageText.textContent = "";
@@ -47,14 +48,17 @@ function setMessage(text, type = "info") {
 }
 
 function setRiskLevel(level) {
+  if (!riskChip || !riskLabel) return;
+
   riskChip.classList.remove("primary", "low", "medium", "high");
   riskChip.classList.add(level);
 
-  const dot = riskChip.querySelector(".badge-risk-dot");
-  riskLabel.textContent =
-    level === "high" ? "High risk" : level === "medium" ? "Medium risk" : "Low risk";
-
-  if (level === "low") {
+  if (level === "high") {
+    riskLabel.textContent = "High risk";
+  } else if (level === "medium") {
+    riskLabel.textContent = "Medium risk";
+  } else {
+    riskLabel.textContent = "Low risk";
     riskChip.classList.add("primary");
   }
 }
@@ -75,6 +79,11 @@ function formatMinutes(mins) {
 
 function formatBridgeRisk(result) {
   if (!result || !Array.isArray(result.conflicts)) {
+    if (result && typeof result.has_conflict === "boolean") {
+      return result.has_conflict
+        ? "Low-bridge conflict detected"
+        : "No low-bridge conflicts detected";
+    }
     return "No data";
   }
   const count = result.conflicts.length;
@@ -85,7 +94,8 @@ function formatBridgeRisk(result) {
 
 function formatNearestBridge(nb) {
   if (!nb) return "None on route";
-  const h = nb.height_m != null ? `${nb.height_m.toFixed(2)} m` : "unknown height";
+  const h =
+    nb.height_m != null ? `${Number(nb.height_m).toFixed(2)} m` : "unknown height";
   const d =
     nb.distance_m != null
       ? nb.distance_m > 1000
@@ -108,8 +118,8 @@ function drawRoute(geojson) {
   }).addTo(map);
   try {
     map.fitBounds(routeLayer.getBounds(), { padding: [20, 20] });
-  } catch {
-    // ignore
+  } catch (e) {
+    console.warn("Could not fit map bounds:", e);
   }
 }
 
@@ -129,6 +139,7 @@ async function handleSubmit(event) {
   }
 
   submitBtn.disabled = true;
+  const originalText = submitBtn.textContent;
   submitBtn.textContent = "Planning route…";
 
   try {
@@ -169,25 +180,25 @@ async function handleSubmit(event) {
     setMessage("Route generated successfully.", "info");
   } catch (err) {
     console.error(err);
-    setMessage(
-      "Network error: " +
-        (err.message && err.message.includes("Failed to fetch")
-          ? "Unable to reach RouteSafe engine. Check API URL and server status."
-          : err.message),
-      "error"
-    );
+    const msg =
+      err.message && err.message.includes("Failed to fetch")
+        ? "Network error: Unable to reach RouteSafe engine. Check API URL and server status."
+        : err.message || "Unknown error contacting RouteSafe engine.";
+    setMessage(msg, "error");
   } finally {
     submitBtn.disabled = false;
-    submitBtn.textContent = "Generate Safe Route";
+    submitBtn.textContent = originalText;
   }
 }
 
 // --- Wire up form & defaults ---
 
-form.addEventListener("submit", handleSubmit);
+if (form) {
+  form.addEventListener("submit", handleSubmit);
+}
 
-// Pre-fill useful demo values
-startInput.value = "LS27 0BN";
-destInput.value = "HD5 0RL";
-heightInput.value = "5";
-avoidInput.checked = true;
+// Pre-fill some sensible demo values
+if (startInput) startInput.value = "LS27 0BN";
+if (destInput) destInput.value = "M31 4QN";
+if (heightInput) heightInput.value = "4";
+if (avoidInput) avoidInput.checked = true;
