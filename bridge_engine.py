@@ -12,15 +12,48 @@ import pandas as pd
 
 EARTH_RADIUS_M = 6371000.0  # metres
 
-# Absolute directory of this file (bridge_engine.py)
+# Directory of this file (bridge_engine.py)
 BASE_DIR = Path(__file__).resolve().parent
 
-# 🔍 DEBUG: list files Render can see in this folder on startup
 print("DEBUG BASE_DIR:", BASE_DIR)
 try:
-    print("DEBUG FILES:", os.listdir(BASE_DIR))
+    print("DEBUG FILES IN BASE_DIR:", os.listdir(BASE_DIR))
 except Exception as e:
     print("DEBUG ERROR listing BASE_DIR:", e)
+
+
+def _find_bridge_csv() -> Path:
+    """
+    Try several sensible locations for bridge_heights_clean.csv and
+    print what we check so we can see exactly what Render sees.
+    """
+    candidate_names = ["bridge_heights_clean.csv"]
+    candidate_dirs = [
+        BASE_DIR,
+        BASE_DIR.parent,          # one level up, just in case
+        Path.cwd(),               # current working dir
+    ]
+
+    for d in candidate_dirs:
+        try:
+            files = os.listdir(d)
+            print(f"DEBUG: listing {d} -> {files}")
+        except Exception as e:
+            print(f"DEBUG: could not list {d}: {e}")
+
+    for name in candidate_names:
+        for d in candidate_dirs:
+            p = d / name
+            print(f"DEBUG: checking path {p}")
+            if p.exists():
+                print(f"DEBUG: FOUND CSV at {p}")
+                return p
+
+    # If we get here, nothing was found – raise a very explicit error
+    msg_lines = ["bridge_heights_clean.csv not found. Looked in:"]
+    for d in candidate_dirs:
+        msg_lines.append(f" - {d}")
+    raise FileNotFoundError("\n".join(msg_lines))
 
 
 @dataclass
@@ -54,16 +87,15 @@ class BridgeEngine:
         conflict_clearance_m: float = 0.0,
         near_clearance_m: float = 0.25,
     ):
-        # If no path given, assume bridge_heights_clean.csv in same folder
         if csv_path is None:
-            csv_path = BASE_DIR / "bridge_heights_clean.csv"
+            csv_file = _find_bridge_csv()
         else:
-            csv_path = BASE_DIR / csv_path
+            csv_file = Path(csv_path)
 
-        print("DEBUG CSV PATH:", csv_path)
+        print("DEBUG USING CSV:", csv_file)
 
-        # Load the cleaned CSV (now a real CSV)
-        self.df = pd.read_csv(csv_path)
+        # Load the cleaned CSV
+        self.df = pd.read_csv(csv_file)
 
         self.search_radius_m = search_radius_m
         self.conflict_clearance_m = conflict_clearance_m
@@ -96,7 +128,7 @@ class BridgeEngine:
         Linear interpolation of lat/lon between start and end for fraction t in [0,1].
         Good enough over short legs.
         """
-        return (lat1 + (lat2 - lat1) * t, lon1 + (lon2 - lon1) * t)
+        return (lat1 + (lat2 - lat1) * t, lon1 + (end_lon - lon1) * t)
 
     # --- Core check ---
 
