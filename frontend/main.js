@@ -1,265 +1,194 @@
-// ===== CONFIG =====
-const API_BASE_URL = "https://routesafe-navigatorv2.onrender.com";
+// Base URL of the Python API service on Render
+const API_BASE = "https://routesafe-navigatorv2.onrender.com";
 
-// ===== DOM =====
-const form = document.getElementById("routeForm");
-const toastEl = document.getElementById("toast");
+document.addEventListener("DOMContentLoaded", () => {
+  // ---- DOM elements ----
+  const startInput = document.getElementById("startPostcodeInput");
+  const destInput = document.getElementById("destPostcodeInput");
+  const heightInput = document.getElementById("vehicleHeightInput");
+  const avoidToggle = document.getElementById("avoidLowBridgesToggle");
+  const generateBtn = document.getElementById("generateBtn");
+  const statusText = document.getElementById("statusText");
 
-const startInput = document.getElementById("startPostcode");
-const destInput = document.getElementById("destPostcode");
-const heightInput = document.getElementById("vehicleHeight");
-const avoidCheckbox = document.getElementById("avoidLowBridges");
+  const distanceValue = document.getElementById("distanceValue");
+  const durationValue = document.getElementById("durationValue");
+  const bridgeRiskValue = document.getElementById("bridgeRiskValue");
+  const nearestBridgeValue = document.getElementById("nearestBridgeValue");
+  const riskBadge = document.getElementById("riskLevelBadge");
 
-const distanceValue = document.getElementById("distanceValue");
-const durationValue = document.getElementById("durationValue");
-const bridgeRiskValue = document.getElementById("bridgeRiskValue");
-const nearestBridgeValue = document.getElementById("nearestBridgeValue");
-const riskBadge = document.getElementById("riskBadge");
-
-const generateBtn = document.getElementById("generateBtn");
-const generateBtnText = document.getElementById("generateBtnText");
-const generateBtnSpinner = document.getElementById("generateBtnSpinner");
-
-// ===== TOAST / BUTTON HELPERS =====
-let toastTimeoutId = null;
-
-function showToast(message, type = "error") {
-  toastEl.textContent = message;
-  toastEl.className = `toast toast-${type}`;
-  toastEl.hidden = false;
-
-  if (toastTimeoutId) clearTimeout(toastTimeoutId);
-  toastTimeoutId = setTimeout(() => {
-    toastEl.hidden = true;
-  }, 6000);
-}
-
-function setLoading(isLoading) {
-  if (isLoading) {
-    generateBtn.disabled = true;
-    generateBtnText.textContent = "Planning route…";
-    generateBtnSpinner.hidden = false;
-  } else {
-    generateBtn.disabled = false;
-    generateBtnText.textContent = "Generate safe route";
-    generateBtnSpinner.hidden = true;
-  }
-}
-
-// ===== MAP SETUP (Leaflet) =====
-let map;
-let mainRouteLayer;
-let altRouteLayer;
-let bridgeLayer;
-
-function initMap() {
-  const mapElement = document.getElementById("map");
-  if (!mapElement) return;
-
-  map = L.map("map", {
-    center: [54.5, -2.5], // UK centre-ish
-    zoom: 6,
-    scrollWheelZoom: false,
-  });
+  // ---- Map setup ----
+  const map = L.map("map", {
+    zoomControl: true,
+    attributionControl: true,
+  }).setView([53.8, -1.6], 6);
 
   L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-    attribution: "&copy; OpenStreetMap contributors",
     maxZoom: 19,
+    attribution: "&copy; OpenStreetMap contributors",
   }).addTo(map);
 
-  mainRouteLayer = L.polyline([], { weight: 4, className: "route-main" }).addTo(
-    map
-  );
-  altRouteLayer = L.polyline([], {
-    weight: 4,
-    dashArray: "6 6",
-    className: "route-alt",
-  }).addTo(map);
-  bridgeLayer = L.layerGroup().addTo(map);
-}
+  let mainRouteLayer = null;
+  let altRouteLayer = null;
+  let bridgeMarkers = [];
 
-function clearMap() {
-  if (!map) return;
-  mainRouteLayer.setLatLngs([]);
-  altRouteLayer.setLatLngs([]);
-  bridgeLayer.clearLayers();
-}
-
-function updateMapFromGeometry(geometry) {
-  if (!map || !geometry) return;
-
-  clearMap();
-
-  // We support a couple of possible shapes to be safe.
-  // 1) { main_route: [[lon, lat], ...], alternative_route: [[lon, lat], ...], bridges: [{lat, lon}, ...] }
-  // 2) { coordinates: [[lon, lat], ...] }
-
-  let bounds = [];
-
-  // Main route
-  if (Array.isArray(geometry.main_route)) {
-    const latLngs = geometry.main_route.map(([lon, lat]) => [lat, lon]);
-    mainRouteLayer.setLatLngs(latLngs);
-    bounds = bounds.concat(latLngs);
-  } else if (Array.isArray(geometry.coordinates)) {
-    const latLngs = geometry.coordinates.map(([lon, lat]) => [lat, lon]);
-    mainRouteLayer.setLatLngs(latLngs);
-    bounds = bounds.concat(latLngs);
+  function clearMapOverlays() {
+    if (mainRouteLayer) {
+      map.removeLayer(mainRouteLayer);
+      mainRouteLayer = null;
+    }
+    if (altRouteLayer) {
+      map.removeLayer(altRouteLayer);
+      altRouteLayer = null;
+    }
+    bridgeMarkers.forEach((m) => map.removeLayer(m));
+    bridgeMarkers = [];
   }
 
-  // Alternative route
-  if (Array.isArray(geometry.alternative_route)) {
-    const latLngs = geometry.alternative_route.map(([lon, lat]) => [lat, lon]);
-    altRouteLayer.setLatLngs(latLngs);
-    bounds = bounds.concat(latLngs);
+  function setStatus(message, type = "info") {
+    statusText.textContent = message || "";
+    statusText.classList.remove("status-error", "status-success");
+    if (type === "error") statusText.classList.add("status-error");
+    if (type === "success") statusText.classList.add("status-success");
   }
 
-  // Bridges
-  if (Array.isArray(geometry.bridges)) {
-    geometry.bridges.forEach((b) => {
-      if (typeof b.lat === "number" && typeof b.lon === "number") {
-        const marker = L.circleMarker([b.lat, b.lon], {
-          radius: 5,
-          className: "bridge-marker",
-        });
-        marker.addTo(bridgeLayer);
-        bounds.push([b.lat, b.lon]);
-      }
-    });
+  function setRiskBadge(risk) {
+    const value = (risk || "").toLowerCase();
+    riskBadge.classList.remove("risk-low", "risk-medium", "risk-high");
+
+    if (value === "high") {
+      riskBadge.textContent = "High";
+      riskBadge.classList.add("risk-high");
+    } else if (value === "medium" || value === "moderate") {
+      riskBadge.textContent = "Medium";
+      riskBadge.classList.add("risk-medium");
+    } else {
+      riskBadge.textContent = "Low";
+      riskBadge.classList.add("risk-low");
+    }
   }
 
-  if (bounds.length > 0) {
-    map.fitBounds(bounds, { padding: [20, 20] });
-  }
-}
+  function updateSummary(data) {
+    if (!data) return;
 
-// ===== SUMMARY / RISK =====
-function setRiskBadge(riskText) {
-  const text = (riskText || "Low").toString();
-  riskBadge.textContent = text;
+    distanceValue.textContent =
+      data.distance_km != null ? `${data.distance_km.toFixed(1)} km` : "–";
 
-  const lower = text.toLowerCase();
-  riskBadge.classList.remove("risk-low", "risk-medium", "risk-high");
-
-  if (lower.includes("high")) {
-    riskBadge.classList.add("risk-high");
-  } else if (lower.includes("med")) {
-    riskBadge.classList.add("risk-medium");
-  } else {
-    riskBadge.classList.add("risk-low");
-  }
-}
-
-function updateSummary(data) {
-  if (!data) return;
-
-  if (typeof data.distance_km === "number") {
-    distanceValue.textContent = `${data.distance_km.toFixed(1)} km`;
-  } else {
-    distanceValue.textContent = "–";
-  }
-
-  if (typeof data.duration_min === "number") {
-    const mins = Math.round(data.duration_min);
-    const hours = Math.floor(mins / 60);
-    const rem = mins % 60;
     durationValue.textContent =
-      hours > 0 ? `${hours}h ${rem}m` : `${mins} min`;
-  } else {
-    durationValue.textContent = "–";
-  }
+      data.duration_min != null ? `${data.duration_min.toFixed(0)} min` : "–";
 
-  bridgeRiskValue.textContent = data.bridge_risk || "–";
+    bridgeRiskValue.textContent = data.bridge_risk || "–";
 
-  if (
-    data.nearest_bridge_height_m != null &&
-    data.nearest_bridge_distance_m != null
-  ) {
-    nearestBridgeValue.textContent = `${data.nearest_bridge_height_m.toFixed(
-      2
-    )} m · ${data.nearest_bridge_distance_m.toFixed(0)} m ahead`;
-  } else {
-    nearestBridgeValue.textContent = "–";
-  }
-
-  setRiskBadge(data.bridge_risk);
-}
-
-// ===== FORM HANDLER =====
-async function handleRouteSubmit(event) {
-  event.preventDefault();
-
-  const start = startInput.value.trim();
-  const dest = destInput.value.trim();
-  const heightRaw = heightInput.value.trim();
-  const avoidLow = avoidCheckbox.checked;
-
-  if (!start || !dest) {
-    showToast("Please enter both start and destination postcodes.", "error");
-    return;
-  }
-
-  const vehicleHeight = parseFloat(heightRaw);
-  if (Number.isNaN(vehicleHeight) || vehicleHeight <= 0) {
-    showToast("Please enter a valid vehicle height in metres.", "error");
-    return;
-  }
-
-  setLoading(true);
-  showToast("", "info"); // clear any previous; will hide shortly
-  toastEl.hidden = true;
-
-  try {
-    const response = await fetch(`${API_BASE_URL}/api/route`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        start_postcode: start,
-        dest_postcode: dest,
-        vehicle_height_m: vehicleHeight,
-        avoid_low_bridges: avoidLow,
-      }),
-    });
-
-    let data;
-    try {
-      data = await response.json();
-    } catch (e) {
-      data = null;
+    if (data.nearest_bridge_height_m != null && data.nearest_bridge_distance_m != null) {
+      nearestBridgeValue.textContent = `${data.nearest_bridge_height_m.toFixed(
+        1
+      )} m · ${data.nearest_bridge_distance_m.toFixed(0)} m away`;
+    } else {
+      nearestBridgeValue.textContent = "–";
     }
 
-    if (!response.ok) {
-      console.error("RouteSafe API error:", response.status, data);
-      const msg =
-        (data && (data.detail || data.message)) ||
-        `RouteSafe engine error (${response.status}).`;
-      showToast(msg, "error");
+    setRiskBadge(data.bridge_risk);
+  }
+
+  function updateMapFromGeometry(geometry, bridges = []) {
+    clearMapOverlays();
+
+    if (!geometry || !geometry.coordinates || geometry.coordinates.length === 0) {
       return;
     }
 
-    updateSummary(data);
-    if (data && data.geometry) {
-      updateMapFromGeometry(data.geometry);
+    const coords = geometry.coordinates.map(([lon, lat]) => [lat, lon]);
+    mainRouteLayer = L.polyline(coords, {
+      color: "#2563eb",
+      weight: 4,
+    }).addTo(map);
+
+    const bounds = mainRouteLayer.getBounds();
+    map.fitBounds(bounds, { padding: [40, 40] });
+
+    // Optional: bridge markers if backend sends them
+    if (Array.isArray(bridges)) {
+      bridges.forEach((b) => {
+        if (b.lat != null && b.lon != null) {
+          const marker = L.circleMarker([b.lat, b.lon], {
+            radius: 5,
+            color: "#fb923c",
+            fillColor: "#fed7aa",
+            fillOpacity: 0.9,
+          }).addTo(map);
+          marker.bindPopup(
+            `Low bridge<br/>Height: ${b.height_m?.toFixed?.(1) ?? b.height_m} m`
+          );
+          bridgeMarkers.push(marker);
+        }
+      });
+    }
+  }
+
+  async function generateRoute() {
+    const start = (startInput.value || "").trim();
+    const dest = (destInput.value || "").trim();
+    const heightStr = (heightInput.value || "").trim();
+    const avoidLow = !!avoidToggle.checked;
+
+    if (!start || !dest || !heightStr) {
+      setStatus("Please enter start, destination and vehicle height.", "error");
+      return;
     }
 
-    showToast("Route generated successfully.", "success");
-  } catch (err) {
-    console.error("RouteSafe request failed:", err);
-    showToast("Error from RouteSafe engine.", "error");
-  } finally {
-    setLoading(false);
+    const vehicleHeightM = parseFloat(heightStr);
+    if (Number.isNaN(vehicleHeightM) || vehicleHeightM <= 0) {
+      setStatus("Vehicle height must be a valid number in metres.", "error");
+      return;
+    }
+
+    setStatus("Contacting RouteSafe engine…");
+    generateBtn.disabled = true;
+    const originalText = generateBtn.textContent;
+    generateBtn.textContent = "Planning route…";
+
+    try {
+      const payload = {
+        start_postcode: start,
+        dest_postcode: dest,
+        vehicle_height_m: vehicleHeightM,
+        avoid_low_bridges: avoidLow,
+      };
+
+      const response = await fetch(`${API_BASE}/api/route`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(payload),
+      });
+
+      if (!response.ok) {
+        const text = await response.text();
+        console.error("RouteSafe API error:", response.status, text);
+        setStatus(
+          `Error from RouteSafe engine (status ${response.status}).`,
+          "error"
+        );
+        return;
+      }
+
+      const data = await response.json();
+      console.log("RouteSafe response:", data);
+
+      updateSummary(data);
+      updateMapFromGeometry(data.geometry, data.bridge_points || []);
+      setStatus("Route generated successfully.", "success");
+    } catch (err) {
+      console.error("Network/API error:", err);
+      setStatus("Error contacting RouteSafe engine. Please try again.", "error");
+    } finally {
+      generateBtn.disabled = false;
+      generateBtn.textContent = originalText;
+    }
   }
-}
 
-// ===== BOOTSTRAP =====
-window.addEventListener("load", () => {
-  // Footer year
-  const yearSpan = document.getElementById("year");
-  if (yearSpan) yearSpan.textContent = new Date().getFullYear();
-
-  initMap();
+  generateBtn.addEventListener("click", (e) => {
+    e.preventDefault();
+    generateRoute();
+  });
 });
-
-form.addEventListener("submit", handleRouteSubmit);
