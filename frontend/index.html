@@ -9,126 +9,159 @@
   <link
     rel="stylesheet"
     href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
-    integrity="sha256-o88AwQnZB+VDvEo6M5xN4C+uNwqjq5pZxv+3A3M0A0w="
+    integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
     crossorigin=""
   />
 
-  <!-- Your styles -->
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
   <div class="app-shell">
-    <header class="app-header">
-      <div class="logo-badge">RS</div>
-      <div class="title-block">
-        <h1>RouteSafe Navigator</h1>
-        <p>Intelligent low-bridge avoidance for HGVs</p>
+    <!-- Header / Hero -->
+    <header class="hero-card">
+      <div class="hero-icon">
+        <span class="hero-badge-text">RS</span>
       </div>
-      <div class="header-meta">
-        <span class="pill pill-version">v1.1</span>
-        <span class="pill pill-brand">by RouteSafe AI</span>
+      <div class="hero-text">
+        <h1 class="app-title">RouteSafe Navigator</h1>
+        <p class="app-subtitle">
+          Intelligent low-bridge avoidance for HGVs
+        </p>
+        <div class="hero-meta">
+          <span class="pill pill-muted">v1.1</span>
+          <span class="pill pill-outline">by RouteSafe AI</span>
+        </div>
       </div>
     </header>
 
-    <main class="app-main">
-      <section id="error-banner" class="error-banner">
-        <span id="error-text"></span>
+    <!-- Toast / error message -->
+    <div id="toast" class="toast" aria-live="polite"></div>
+
+    <!-- Main layout -->
+    <main class="layout">
+      <!-- LEFT COLUMN – FORM + SUMMARY -->
+      <section class="column">
+        <!-- Plan route card -->
+        <section class="card">
+          <h2 class="card-title">Plan route</h2>
+          <p class="card-subtitle">Enter UK postcodes and your vehicle height.</p>
+
+          <form id="routeForm" class="form-grid">
+            <label class="field">
+              <span class="field-label">Start postcode</span>
+              <input
+                id="startPostcode"
+                type="text"
+                autocomplete="postal-code"
+                placeholder="e.g. LS27 0BN"
+                required
+              />
+            </label>
+
+            <label class="field">
+              <span class="field-label">Destination postcode</span>
+              <input
+                id="destPostcode"
+                type="text"
+                autocomplete="postal-code"
+                placeholder="e.g. M31 4QN"
+                required
+              />
+            </label>
+
+            <label class="field">
+              <span class="field-label">Vehicle height (metres)</span>
+              <input
+                id="vehicleHeight"
+                type="number"
+                step="0.1"
+                min="0"
+                placeholder="e.g. 4.5"
+                required
+              />
+            </label>
+
+            <label class="toggle-row">
+              <span class="field-label">Avoid low bridges</span>
+              <label class="switch">
+                <input id="avoidLowBridges" type="checkbox" checked />
+                <span class="slider"></span>
+              </label>
+            </label>
+
+            <button id="generateBtn" type="submit" class="primary-btn">
+              <span id="generateBtnText">Generate safe route</span>
+              <span id="generateBtnSpinner" class="btn-spinner" hidden></span>
+            </button>
+          </form>
+        </section>
+
+        <!-- Route summary card -->
+        <section class="card">
+          <h2 class="card-title">Route summary</h2>
+          <p class="card-subtitle">
+            Distance, ETA and nearest low bridge along your selected route.
+          </p>
+
+          <dl class="summary-grid">
+            <div>
+              <dt>Distance</dt>
+              <dd id="distanceValue">–</dd>
+            </div>
+            <div>
+              <dt>Estimated time</dt>
+              <dd id="durationValue">–</dd>
+            </div>
+            <div>
+              <dt>Bridge risk</dt>
+              <dd id="bridgeRiskValue">–</dd>
+            </div>
+            <div>
+              <dt>Nearest bridge</dt>
+              <dd id="nearestBridgeValue">–</dd>
+            </div>
+          </dl>
+
+          <div class="risk-pill-row">
+            <span>Risk level</span>
+            <span id="riskBadge" class="risk-pill risk-low">Low</span>
+          </div>
+        </section>
       </section>
 
-      <section class="card">
-        <h2>Plan route</h2>
-        <p>Enter details below.</p>
-
-        <div class="form-group">
-          <label for="start-postcode">Start postcode</label>
-          <input id="start-postcode" type="text" placeholder="e.g. LS27 0BN" />
-        </div>
-
-        <div class="form-group">
-          <label for="dest-postcode">Destination postcode</label>
-          <input id="dest-postcode" type="text" placeholder="e.g. M31 4QN" />
-        </div>
-
-        <div class="form-group">
-          <label for="vehicle-height">Vehicle height (metres)</label>
-          <input id="vehicle-height" type="number" step="0.1" placeholder="e.g. 4.5" />
-        </div>
-
-        <div class="form-group inline">
-          <span>Avoid low bridges</span>
-          <label class="switch">
-            <input id="avoid-low-bridges" type="checkbox" checked />
-            <span class="slider"></span>
-          </label>
-        </div>
-
-        <button id="generate-route-btn" class="primary-btn">
-          Generate safe route
-        </button>
-
-        <p id="status-line" class="status-line"></p>
-      </section>
-
-      <section class="card">
-        <h2>Route summary</h2>
-        <p>Metrics &amp; bridge risk</p>
-
-        <div class="metrics-grid">
-          <div>
-            <span class="metric-label">Distance</span>
-            <span id="distance-value" class="metric-value">–</span>
+      <!-- RIGHT COLUMN – MAP -->
+      <section class="column">
+        <section class="card card-map">
+          <div class="card-map-header">
+            <h2 class="card-title">Map</h2>
+            <span class="map-chip">RouteSafe engine · ORS + UK bridge data</span>
           </div>
-          <div>
-            <span class="metric-label">Estimated time</span>
-            <span id="time-value" class="metric-value">–</span>
-          </div>
-          <div>
-            <span class="metric-label">Bridge risk</span>
-            <span id="bridge-risk-value" class="metric-value">–</span>
-          </div>
-          <div>
-            <span class="metric-label">Nearest bridge</span>
-            <span id="nearest-bridge-value" class="metric-value">–</span>
-          </div>
-        </div>
 
-        <div class="risk-row">
-          <span>Risk level</span>
-          <span id="risk-badge" class="risk-badge risk-low">Low</span>
-        </div>
-      </section>
+          <!-- IMPORTANT: map container with explicit height -->
+          <div id="map" class="map-container"></div>
 
-      <section class="card">
-        <h2>Map</h2>
-        <div id="map" class="map-container"></div>
-
-        <div class="legend">
-          <span class="legend-item">
-            <span class="legend-swatch legend-main"></span> Main route
-          </span>
-          <span class="legend-item">
-            <span class="legend-swatch legend-alt"></span> Alternative route
-          </span>
-          <span class="legend-item">
-            <span class="legend-swatch legend-bridge"></span> Low bridge
-          </span>
-        </div>
+          <div class="map-legend">
+            <span><span class="legend-swatch legend-main"></span>Main route</span>
+            <span><span class="legend-swatch legend-alt"></span>Alternative route</span>
+            <span><span class="legend-swatch legend-bridge"></span>Low bridge</span>
+          </div>
+        </section>
       </section>
     </main>
 
-    <footer class="app-footer">
-      &copy; RouteSafe Navigator
+    <footer class="footer">
+      © <span id="year"></span> · RouteSafe Navigator
     </footer>
   </div>
 
   <!-- Leaflet JS -->
   <script
     src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
-    integrity="sha256-o9N1j7kP5LkG2cuglRez2oJ6TP2PzYlA2Bmm7uHkLMY="
+    integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
     crossorigin=""
   ></script>
 
-  <!-- Your main script -->
+  <!-- App JS -->
   <script src="main.js"></script>
 </body>
 </html>
