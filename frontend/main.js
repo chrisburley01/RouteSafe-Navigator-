@@ -1,326 +1,265 @@
-// main.js
-// Frontend for RouteSafe Navigator
-// Uses the Python API deployed at routesafe-navigatorv2.onrender.com
-
+// ===== CONFIG =====
 const API_BASE_URL = "https://routesafe-navigatorv2.onrender.com";
 
+// ===== DOM =====
+const form = document.getElementById("routeForm");
+const toastEl = document.getElementById("toast");
+
+const startInput = document.getElementById("startPostcode");
+const destInput = document.getElementById("destPostcode");
+const heightInput = document.getElementById("vehicleHeight");
+const avoidCheckbox = document.getElementById("avoidLowBridges");
+
+const distanceValue = document.getElementById("distanceValue");
+const durationValue = document.getElementById("durationValue");
+const bridgeRiskValue = document.getElementById("bridgeRiskValue");
+const nearestBridgeValue = document.getElementById("nearestBridgeValue");
+const riskBadge = document.getElementById("riskBadge");
+
+const generateBtn = document.getElementById("generateBtn");
+const generateBtnText = document.getElementById("generateBtnText");
+const generateBtnSpinner = document.getElementById("generateBtnSpinner");
+
+// ===== TOAST / BUTTON HELPERS =====
+let toastTimeoutId = null;
+
+function showToast(message, type = "error") {
+  toastEl.textContent = message;
+  toastEl.className = `toast toast-${type}`;
+  toastEl.hidden = false;
+
+  if (toastTimeoutId) clearTimeout(toastTimeoutId);
+  toastTimeoutId = setTimeout(() => {
+    toastEl.hidden = true;
+  }, 6000);
+}
+
+function setLoading(isLoading) {
+  if (isLoading) {
+    generateBtn.disabled = true;
+    generateBtnText.textContent = "Planning route…";
+    generateBtnSpinner.hidden = false;
+  } else {
+    generateBtn.disabled = false;
+    generateBtnText.textContent = "Generate safe route";
+    generateBtnSpinner.hidden = true;
+  }
+}
+
+// ===== MAP SETUP (Leaflet) =====
 let map;
-let mainRouteLayer = null;
-let altRouteLayer = null;
-let bridgeLayer = null;
-
-/* ---------- UI helpers ---------- */
-
-function showError(message) {
-  const banner = document.getElementById("error-banner");
-  const text = document.getElementById("error-text");
-  if (!banner || !text) return;
-
-  text.textContent = message;
-  banner.classList.add("visible");
-}
-
-function clearError() {
-  const banner = document.getElementById("error-banner");
-  if (!banner) return;
-  banner.classList.remove("visible");
-}
-
-function setStatus(message) {
-  const el = document.getElementById("status-line");
-  if (el) el.textContent = message;
-}
-
-/* ---------- Map setup ---------- */
+let mainRouteLayer;
+let altRouteLayer;
+let bridgeLayer;
 
 function initMap() {
-  const mapEl = document.getElementById("map");
-  if (!mapEl) {
-    console.error("Map container #map not found");
-    return;
-  }
+  const mapElement = document.getElementById("map");
+  if (!mapElement) return;
 
   map = L.map("map", {
-    zoomControl: true
+    center: [54.5, -2.5], // UK centre-ish
+    zoom: 6,
+    scrollWheelZoom: false,
   });
 
   L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+    attribution: "&copy; OpenStreetMap contributors",
     maxZoom: 19,
-    attribution: "&copy; OpenStreetMap contributors"
   }).addTo(map);
 
-  // Centre of GB
-  map.setView([54.2, -2.5], 6);
+  mainRouteLayer = L.polyline([], { weight: 4, className: "route-main" }).addTo(
+    map
+  );
+  altRouteLayer = L.polyline([], {
+    weight: 4,
+    dashArray: "6 6",
+    className: "route-alt",
+  }).addTo(map);
+  bridgeLayer = L.layerGroup().addTo(map);
 }
 
-/* ---------- Summary helpers ---------- */
-
-function formatKm(value) {
-  if (value == null || isNaN(value)) return "–";
-  const km = value > 1000 ? value / 1000 : value;
-  return km.toFixed(1) + " km";
+function clearMap() {
+  if (!map) return;
+  mainRouteLayer.setLatLngs([]);
+  altRouteLayer.setLatLngs([]);
+  bridgeLayer.clearLayers();
 }
 
-function formatMinutes(value) {
-  if (value == null || isNaN(value)) return "–";
-  const mins = Math.round(value);
-  if (mins < 60) return `${mins} min`;
-  const h = Math.floor(mins / 60);
-  const m = mins % 60;
-  return m ? `${h}h ${m}m` : `${h}h`;
+function updateMapFromGeometry(geometry) {
+  if (!map || !geometry) return;
+
+  clearMap();
+
+  // We support a couple of possible shapes to be safe.
+  // 1) { main_route: [[lon, lat], ...], alternative_route: [[lon, lat], ...], bridges: [{lat, lon}, ...] }
+  // 2) { coordinates: [[lon, lat], ...] }
+
+  let bounds = [];
+
+  // Main route
+  if (Array.isArray(geometry.main_route)) {
+    const latLngs = geometry.main_route.map(([lon, lat]) => [lat, lon]);
+    mainRouteLayer.setLatLngs(latLngs);
+    bounds = bounds.concat(latLngs);
+  } else if (Array.isArray(geometry.coordinates)) {
+    const latLngs = geometry.coordinates.map(([lon, lat]) => [lat, lon]);
+    mainRouteLayer.setLatLngs(latLngs);
+    bounds = bounds.concat(latLngs);
+  }
+
+  // Alternative route
+  if (Array.isArray(geometry.alternative_route)) {
+    const latLngs = geometry.alternative_route.map(([lon, lat]) => [lat, lon]);
+    altRouteLayer.setLatLngs(latLngs);
+    bounds = bounds.concat(latLngs);
+  }
+
+  // Bridges
+  if (Array.isArray(geometry.bridges)) {
+    geometry.bridges.forEach((b) => {
+      if (typeof b.lat === "number" && typeof b.lon === "number") {
+        const marker = L.circleMarker([b.lat, b.lon], {
+          radius: 5,
+          className: "bridge-marker",
+        });
+        marker.addTo(bridgeLayer);
+        bounds.push([b.lat, b.lon]);
+      }
+    });
+  }
+
+  if (bounds.length > 0) {
+    map.fitBounds(bounds, { padding: [20, 20] });
+  }
 }
 
-function formatBridgeDistance(value) {
-  if (value == null || isNaN(value)) return "–";
-  if (value > 1000) return (value / 1000).toFixed(1) + " km";
-  return Math.round(value) + " m";
-}
+// ===== SUMMARY / RISK =====
+function setRiskBadge(riskText) {
+  const text = (riskText || "Low").toString();
+  riskBadge.textContent = text;
 
-function getRiskClass(risk) {
-  const r = (risk || "").toLowerCase();
-  if (r === "high") return "risk-high";
-  if (r === "medium" || r === "med") return "risk-medium";
-  return "risk-low";
+  const lower = text.toLowerCase();
+  riskBadge.classList.remove("risk-low", "risk-medium", "risk-high");
+
+  if (lower.includes("high")) {
+    riskBadge.classList.add("risk-high");
+  } else if (lower.includes("med")) {
+    riskBadge.classList.add("risk-medium");
+  } else {
+    riskBadge.classList.add("risk-low");
+  }
 }
 
 function updateSummary(data) {
-  try {
-    const distanceEl = document.getElementById("distance-value");
-    const timeEl = document.getElementById("time-value");
-    const riskEl = document.getElementById("bridge-risk-value");
-    const nearestBridgeEl = document.getElementById("nearest-bridge-value");
-    const riskBadge = document.getElementById("risk-badge");
+  if (!data) return;
 
-    if (distanceEl) {
-      const dist = data.distance_km ?? data.distance_m;
-      distanceEl.textContent = formatKm(dist);
-    }
-
-    if (timeEl) {
-      const dur = data.duration_min ?? data.duration_minutes;
-      timeEl.textContent = formatMinutes(dur);
-    }
-
-    const riskText = data.bridge_risk || data.risk_level || "Low";
-    if (riskEl) riskEl.textContent = riskText;
-
-    let nearestText = "None on route";
-    if (data.nearest_bridge_distance_m != null) {
-      nearestText =
-        formatBridgeDistance(data.nearest_bridge_distance_m) +
-        (data.nearest_bridge_height_m != null
-          ? ` away · ${data.nearest_bridge_height_m.toFixed(2)} m`
-          : "");
-    }
-    if (nearestBridgeEl) nearestBridgeEl.textContent = nearestText;
-
-    if (riskBadge) {
-      riskBadge.textContent = riskText;
-      riskBadge.classList.remove("risk-low", "risk-medium", "risk-high");
-      riskBadge.classList.add(getRiskClass(riskText));
-    }
-  } catch (err) {
-    console.error("Error updating summary", err);
-  }
-}
-
-/* ---------- Geometry helpers ---------- */
-
-function lineFromGeoJson(geo) {
-  if (!geo || geo.type !== "LineString" || !Array.isArray(geo.coordinates)) {
-    return null;
-  }
-  return geo.coordinates.map(([lon, lat]) => [lat, lon]);
-}
-
-function extractMainGeometry(geometry) {
-  if (!geometry) return null;
-
-  // Direct LineString
-  if (geometry.type === "LineString") return geometry;
-
-  // ORS-style FeatureCollection
-  if (geometry.type === "FeatureCollection" && Array.isArray(geometry.features)) {
-    const feature = geometry.features[0];
-    if (feature && feature.geometry && feature.geometry.type === "LineString") {
-      return feature.geometry;
-    }
+  if (typeof data.distance_km === "number") {
+    distanceValue.textContent = `${data.distance_km.toFixed(1)} km`;
+  } else {
+    distanceValue.textContent = "–";
   }
 
-  console.warn("Unrecognised geometry format", geometry);
-  return null;
+  if (typeof data.duration_min === "number") {
+    const mins = Math.round(data.duration_min);
+    const hours = Math.floor(mins / 60);
+    const rem = mins % 60;
+    durationValue.textContent =
+      hours > 0 ? `${hours}h ${rem}m` : `${mins} min`;
+  } else {
+    durationValue.textContent = "–";
+  }
+
+  bridgeRiskValue.textContent = data.bridge_risk || "–";
+
+  if (
+    data.nearest_bridge_height_m != null &&
+    data.nearest_bridge_distance_m != null
+  ) {
+    nearestBridgeValue.textContent = `${data.nearest_bridge_height_m.toFixed(
+      2
+    )} m · ${data.nearest_bridge_distance_m.toFixed(0)} m ahead`;
+  } else {
+    nearestBridgeValue.textContent = "–";
+  }
+
+  setRiskBadge(data.bridge_risk);
 }
 
-function drawRouteOnMap(geometry) {
-  if (!map || !geometry) {
-    console.warn("No map or geometry to draw");
+// ===== FORM HANDLER =====
+async function handleRouteSubmit(event) {
+  event.preventDefault();
+
+  const start = startInput.value.trim();
+  const dest = destInput.value.trim();
+  const heightRaw = heightInput.value.trim();
+  const avoidLow = avoidCheckbox.checked;
+
+  if (!start || !dest) {
+    showToast("Please enter both start and destination postcodes.", "error");
     return;
   }
 
-  // Clear existing
-  if (mainRouteLayer) {
-    map.removeLayer(mainRouteLayer);
-    mainRouteLayer = null;
-  }
-  if (altRouteLayer) {
-    map.removeLayer(altRouteLayer);
-    altRouteLayer = null;
-  }
-  if (bridgeLayer) {
-    map.removeLayer(bridgeLayer);
-    bridgeLayer = null;
-  }
-
-  const layersToFit = [];
-
-  try {
-    const mainGeo = extractMainGeometry(geometry);
-    const mainLine = mainGeo ? lineFromGeoJson(mainGeo) : null;
-
-    if (mainLine && mainLine.length) {
-      mainRouteLayer = L.polyline(mainLine, { weight: 4 });
-      mainRouteLayer.addTo(map);
-      layersToFit.push(mainRouteLayer);
-    }
-
-    // Optional: bridges array
-    const bridgePoints = [];
-    if (Array.isArray(geometry.bridges)) {
-      geometry.bridges.forEach((b) => {
-        if (Array.isArray(b) && b.length >= 2) {
-          const [lon, lat] = b;
-          bridgePoints.push([lat, lon]);
-        } else if (b && typeof b.lat === "number" && typeof b.lon === "number") {
-          bridgePoints.push([b.lat, b.lon]);
-        }
-      });
-    }
-
-    if (bridgePoints.length) {
-      bridgeLayer = L.layerGroup(
-        bridgePoints.map((latLng) =>
-          L.circleMarker(latLng, {
-            radius: 5
-          })
-        )
-      );
-      bridgeLayer.addTo(map);
-      layersToFit.push(bridgeLayer);
-    }
-
-    if (layersToFit.length) {
-      const group = L.featureGroup(layersToFit);
-      map.fitBounds(group.getBounds().pad(0.2));
-    }
-  } catch (err) {
-    console.error("Error drawing geometry", err);
-  }
-}
-
-/* ---------- Generate button ---------- */
-
-async function handleGenerateClick() {
-  clearError();
-
-  const startEl = document.getElementById("start-postcode");
-  const destEl = document.getElementById("dest-postcode");
-  const heightEl = document.getElementById("vehicle-height");
-  const avoidEl = document.getElementById("avoid-low-bridges");
-
-  const start = startEl ? startEl.value.trim() : "";
-  const dest = destEl ? destEl.value.trim() : "";
-  const heightStr = heightEl ? heightEl.value.trim() : "";
-  const avoidLow = avoidEl ? avoidEl.checked : true;
-
-  if (!start || !dest || !heightStr) {
-    showError("Please enter start, destination and vehicle height.");
+  const vehicleHeight = parseFloat(heightRaw);
+  if (Number.isNaN(vehicleHeight) || vehicleHeight <= 0) {
+    showToast("Please enter a valid vehicle height in metres.", "error");
     return;
   }
 
-  const vehicleHeight = Number(heightStr);
-  if (isNaN(vehicleHeight) || vehicleHeight <= 0) {
-    showError("Vehicle height must be a positive number.");
-    return;
-  }
-
-  const btn = document.getElementById("generate-route-btn");
-  if (btn) {
-    btn.disabled = true;
-    btn.textContent = "Generating…";
-  }
-  setStatus("Contacting RouteSafe engine…");
+  setLoading(true);
+  showToast("", "info"); // clear any previous; will hide shortly
+  toastEl.hidden = true;
 
   try {
-    const payload = {
-      start_postcode: start,
-      dest_postcode: dest,
-      vehicle_height_m: vehicleHeight,
-      avoid_low_bridges: avoidLow
-    };
-
     const response = await fetch(`${API_BASE_URL}/api/route`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Accept: "application/json"
       },
-      body: JSON.stringify(payload)
+      body: JSON.stringify({
+        start_postcode: start,
+        dest_postcode: dest,
+        vehicle_height_m: vehicleHeight,
+        avoid_low_bridges: avoidLow,
+      }),
     });
 
+    let data;
+    try {
+      data = await response.json();
+    } catch (e) {
+      data = null;
+    }
+
     if (!response.ok) {
-      let detail = `RouteSafe API error (${response.status})`;
-      try {
-        const body = await response.json();
-        if (body && body.detail) {
-          detail =
-            typeof body.detail === "string"
-              ? body.detail
-              : JSON.stringify(body.detail);
-        }
-      } catch (e) {
-        // ignore
-      }
-      console.error("API error", detail);
-      showError(detail);
-      setStatus("Error from RouteSafe engine.");
+      console.error("RouteSafe API error:", response.status, data);
+      const msg =
+        (data && (data.detail || data.message)) ||
+        `RouteSafe engine error (${response.status}).`;
+      showToast(msg, "error");
       return;
     }
 
-    const data = await response.json();
-    console.log("RouteSafe response", data);
-
     updateSummary(data);
-
-    if (data.geometry) {
-      drawRouteOnMap(data.geometry);
-    } else {
-      console.warn("No geometry in response");
+    if (data && data.geometry) {
+      updateMapFromGeometry(data.geometry);
     }
 
-    setStatus("Route generated.");
+    showToast("Route generated successfully.", "success");
   } catch (err) {
-    console.error("Error calling RouteSafe API", err);
-    showError("Unable to reach RouteSafe engine. Please try again.");
-    setStatus("Error contacting RouteSafe engine.");
+    console.error("RouteSafe request failed:", err);
+    showToast("Error from RouteSafe engine.", "error");
   } finally {
-    if (btn) {
-      btn.disabled = false;
-      btn.textContent = "Generate safe route";
-    }
+    setLoading(false);
   }
 }
 
-/* ---------- Boot ---------- */
+// ===== BOOTSTRAP =====
+window.addEventListener("load", () => {
+  // Footer year
+  const yearSpan = document.getElementById("year");
+  if (yearSpan) yearSpan.textContent = new Date().getFullYear();
 
-document.addEventListener("DOMContentLoaded", () => {
-  try {
-    initMap();
-  } catch (err) {
-    console.error("Failed to init map", err);
-  }
-
-  const btn = document.getElementById("generate-route-btn");
-  if (btn) {
-    btn.addEventListener("click", handleGenerateClick);
-  }
+  initMap();
 });
+
+form.addEventListener("submit", handleRouteSubmit);
