@@ -17,140 +17,116 @@
 </head>
 <body>
   <div class="app-shell">
-    <!-- Header / Hero -->
-    <header class="hero-card">
-      <div class="hero-icon">
-        <span class="hero-badge-text">RS</span>
-      </div>
-      <div class="hero-text">
-        <h1 class="app-title">RouteSafe Navigator</h1>
-        <p class="app-subtitle">
-          Intelligent low-bridge avoidance for HGVs
-        </p>
-        <div class="hero-meta">
-          <span class="pill pill-muted">v1.1</span>
-          <span class="pill pill-outline">by RouteSafe AI</span>
+    <header class="app-header">
+      <div class="brand">
+        <div class="brand-icon">RS</div>
+        <div class="brand-text">
+          <div class="brand-title">RouteSafe Navigator</div>
+          <div class="brand-subtitle">Intelligent low-bridge avoidance for HGVs</div>
         </div>
       </div>
+      <div class="version-pill">v1.1</div>
     </header>
 
-    <!-- Toast / error message -->
-    <div id="toast" class="toast" aria-live="polite"></div>
+    <main class="main-layout">
+      <!-- Plan route -->
+      <section class="card card-plan">
+        <h2 class="card-title">Plan route</h2>
+        <p class="card-subtitle">Enter UK postcodes and vehicle height.</p>
 
-    <!-- Main layout -->
-    <main class="layout">
-      <!-- LEFT COLUMN – FORM + SUMMARY -->
-      <section class="column">
-        <!-- Plan route card -->
-        <section class="card">
-          <h2 class="card-title">Plan route</h2>
-          <p class="card-subtitle">Enter UK postcodes and your vehicle height.</p>
+        <div class="form-grid">
+          <label class="field">
+            <span class="field-label">Start postcode</span>
+            <input id="startPostcodeInput" type="text" placeholder="e.g. LS27 0BN" />
+          </label>
 
-          <form id="routeForm" class="form-grid">
-            <label class="field">
-              <span class="field-label">Start postcode</span>
-              <input
-                id="startPostcode"
-                type="text"
-                autocomplete="postal-code"
-                placeholder="e.g. LS27 0BN"
-                required
-              />
-            </label>
+          <label class="field">
+            <span class="field-label">Destination postcode</span>
+            <input id="destPostcodeInput" type="text" placeholder="e.g. M31 4QN" />
+          </label>
 
-            <label class="field">
-              <span class="field-label">Destination postcode</span>
-              <input
-                id="destPostcode"
-                type="text"
-                autocomplete="postal-code"
-                placeholder="e.g. M31 4QN"
-                required
-              />
-            </label>
+          <label class="field">
+            <span class="field-label">Vehicle height (metres)</span>
+            <input id="vehicleHeightInput" type="number" step="0.1" min="1" placeholder="e.g. 4.5" />
+          </label>
+        </div>
 
-            <label class="field">
-              <span class="field-label">Vehicle height (metres)</span>
-              <input
-                id="vehicleHeight"
-                type="number"
-                step="0.1"
-                min="0"
-                placeholder="e.g. 4.5"
-                required
-              />
-            </label>
+        <div class="options-row">
+          <label class="toggle">
+            <input id="avoidLowBridgesToggle" type="checkbox" checked />
+            <span class="toggle-slider"></span>
+            <span class="toggle-label">Avoid low bridges</span>
+          </label>
+        </div>
 
-            <label class="toggle-row">
-              <span class="field-label">Avoid low bridges</span>
-              <label class="switch">
-                <input id="avoidLowBridges" type="checkbox" checked />
-                <span class="slider"></span>
-              </label>
-            </label>
+        <button id="generateBtn" class="primary-btn">
+          Generate safe route
+        </button>
 
-            <button id="generateBtn" type="submit" class="primary-btn">
-              <span id="generateBtnText">Generate safe route</span>
-              <span id="generateBtnSpinner" class="btn-spinner" hidden></span>
-            </button>
-          </form>
-        </section>
-
-        <!-- Route summary card -->
-        <section class="card">
-          <h2 class="card-title">Route summary</h2>
-          <p class="card-subtitle">
-            Distance, ETA and nearest low bridge along your selected route.
-          </p>
-
-          <dl class="summary-grid">
-            <div>
-              <dt>Distance</dt>
-              <dd id="distanceValue">–</dd>
-            </div>
-            <div>
-              <dt>Estimated time</dt>
-              <dd id="durationValue">–</dd>
-            </div>
-            <div>
-              <dt>Bridge risk</dt>
-              <dd id="bridgeRiskValue">–</dd>
-            </div>
-            <div>
-              <dt>Nearest bridge</dt>
-              <dd id="nearestBridgeValue">–</dd>
-            </div>
-          </dl>
-
-          <div class="risk-pill-row">
-            <span>Risk level</span>
-            <span id="riskBadge" class="risk-pill risk-low">Low</span>
-          </div>
-        </section>
+        <div id="statusText" class="status-text"></div>
       </section>
 
-      <!-- RIGHT COLUMN – MAP -->
-      <section class="column">
-        <section class="card card-map">
-          <div class="card-map-header">
-            <h2 class="card-title">Map</h2>
-            <span class="map-chip">RouteSafe engine · ORS + UK bridge data</span>
-          </div>
+      <!-- Route summary -->
+      <section class="card card-summary">
+        <h2 class="card-title">Route summary</h2>
+        <p class="card-subtitle">
+          Distance, ETA, and nearest low bridge along your selected route.
+        </p>
 
-          <!-- IMPORTANT: map container with explicit height -->
-          <div id="map" class="map-container"></div>
-
-          <div class="map-legend">
-            <span><span class="legend-swatch legend-main"></span>Main route</span>
-            <span><span class="legend-swatch legend-alt"></span>Alternative route</span>
-            <span><span class="legend-swatch legend-bridge"></span>Low bridge</span>
+        <div class="summary-grid">
+          <div class="summary-item">
+            <div class="summary-label">Distance</div>
+            <div id="distanceValue" class="summary-value">–</div>
           </div>
-        </section>
+          <div class="summary-item">
+            <div class="summary-label">Estimated time</div>
+            <div id="durationValue" class="summary-value">–</div>
+          </div>
+          <div class="summary-item">
+            <div class="summary-label">Bridge risk</div>
+            <div id="bridgeRiskValue" class="summary-value">–</div>
+          </div>
+          <div class="summary-item">
+            <div class="summary-label">Nearest bridge</div>
+            <div id="nearestBridgeValue" class="summary-value">–</div>
+          </div>
+        </div>
+
+        <div class="risk-row">
+          <span class="summary-label">Risk level</span>
+          <span id="riskLevelBadge" class="risk-badge risk-low">Low</span>
+        </div>
+
+        <p class="card-footnote">
+          Uses RouteSafe engine · ORS routing · UK bridge data.
+        </p>
+      </section>
+
+      <!-- Map -->
+      <section class="card card-map">
+        <div class="map-header">
+          <h2 class="card-title">Map</h2>
+          <div class="map-pill">RouteSafe engine · ORS + UK bridge data</div>
+        </div>
+
+        <div id="map" class="map-container"></div>
+
+        <div class="legend">
+          <span class="legend-item">
+            <span class="legend-swatch legend-main"></span> Main route
+          </span>
+          <span class="legend-item">
+            <span class="legend-swatch legend-alt"></span> Alternative route
+          </span>
+          <span class="legend-item">
+            <span class="legend-swatch legend-bridge"></span> Low bridge
+          </span>
+        </div>
       </section>
     </main>
 
-    <footer class="footer">
-      © <span id="year"></span> · RouteSafe Navigator
+    <footer class="app-footer">
+      © RouteSafe Navigator
     </footer>
   </div>
 
@@ -161,7 +137,6 @@
     crossorigin=""
   ></script>
 
-  <!-- App JS -->
   <script src="main.js"></script>
 </body>
 </html>
