@@ -1,6 +1,6 @@
 // main.js
 // Frontend for RouteSafe Navigator
-// Talks to the Python API on routesafe-navigatorv2.onrender.com
+// Uses the Python API deployed at routesafe-navigatorv2.onrender.com
 
 const API_BASE_URL = "https://routesafe-navigatorv2.onrender.com";
 
@@ -9,7 +9,7 @@ let mainRouteLayer = null;
 let altRouteLayer = null;
 let bridgeLayer = null;
 
-/* -------------------- UI helpers -------------------- */
+/* ---------- UI helpers ---------- */
 
 function showError(message) {
   const banner = document.getElementById("error-banner");
@@ -31,7 +31,7 @@ function setStatus(message) {
   if (el) el.textContent = message;
 }
 
-/* -------------------- Map setup -------------------- */
+/* ---------- Map setup ---------- */
 
 function initMap() {
   const mapEl = document.getElementById("map");
@@ -40,26 +40,23 @@ function initMap() {
     return;
   }
 
-  // Create the map
   map = L.map("map", {
     zoomControl: true
   });
 
-  // OSM base layer
   L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
     maxZoom: 19,
     attribution: "&copy; OpenStreetMap contributors"
   }).addTo(map);
 
-  // Start view: centre of GB
+  // Centre of GB
   map.setView([54.2, -2.5], 6);
 }
 
-/* -------------------- Summary panel -------------------- */
+/* ---------- Summary helpers ---------- */
 
 function formatKm(value) {
   if (value == null || isNaN(value)) return "–";
-  // API might give km or metres; assume > 1000 is metres
   const km = value > 1000 ? value / 1000 : value;
   return km.toFixed(1) + " km";
 }
@@ -75,9 +72,7 @@ function formatMinutes(value) {
 
 function formatBridgeDistance(value) {
   if (value == null || isNaN(value)) return "–";
-  if (value > 1000) {
-    return (value / 1000).toFixed(1) + " km";
-  }
+  if (value > 1000) return (value / 1000).toFixed(1) + " km";
   return Math.round(value) + " m";
 }
 
@@ -96,8 +91,15 @@ function updateSummary(data) {
     const nearestBridgeEl = document.getElementById("nearest-bridge-value");
     const riskBadge = document.getElementById("risk-badge");
 
-    if (distanceEl) distanceEl.textContent = formatKm(data.distance_km ?? data.distance_m);
-    if (timeEl) timeEl.textContent = formatMinutes(data.duration_min ?? data.duration_minutes);
+    if (distanceEl) {
+      const dist = data.distance_km ?? data.distance_m;
+      distanceEl.textContent = formatKm(dist);
+    }
+
+    if (timeEl) {
+      const dur = data.duration_min ?? data.duration_minutes;
+      timeEl.textContent = formatMinutes(dur);
+    }
 
     const riskText = data.bridge_risk || data.risk_level || "Low";
     if (riskEl) riskEl.textContent = riskText;
@@ -122,9 +124,8 @@ function updateSummary(data) {
   }
 }
 
-/* -------------------- Geometry helpers -------------------- */
+/* ---------- Geometry helpers ---------- */
 
-// Convert GeoJSON LineString -> Leaflet latLngs
 function lineFromGeoJson(geo) {
   if (!geo || geo.type !== "LineString" || !Array.isArray(geo.coordinates)) {
     return null;
@@ -132,13 +133,31 @@ function lineFromGeoJson(geo) {
   return geo.coordinates.map(([lon, lat]) => [lat, lon]);
 }
 
+function extractMainGeometry(geometry) {
+  if (!geometry) return null;
+
+  // Direct LineString
+  if (geometry.type === "LineString") return geometry;
+
+  // ORS-style FeatureCollection
+  if (geometry.type === "FeatureCollection" && Array.isArray(geometry.features)) {
+    const feature = geometry.features[0];
+    if (feature && feature.geometry && feature.geometry.type === "LineString") {
+      return feature.geometry;
+    }
+  }
+
+  console.warn("Unrecognised geometry format", geometry);
+  return null;
+}
+
 function drawRouteOnMap(geometry) {
   if (!map || !geometry) {
-    console.warn("No geometry to draw");
+    console.warn("No map or geometry to draw");
     return;
   }
 
-  // Clear existing layers
+  // Clear existing
   if (mainRouteLayer) {
     map.removeLayer(mainRouteLayer);
     mainRouteLayer = null;
@@ -155,14 +174,8 @@ function drawRouteOnMap(geometry) {
   const layersToFit = [];
 
   try {
-    // main route
-    let mainLine = null;
-
-    if (geometry.main) {
-      mainLine = lineFromGeoJson(geometry.main);
-    } else if (geometry.type === "LineString") {
-      mainLine = lineFromGeoJson(geometry);
-    }
+    const mainGeo = extractMainGeometry(geometry);
+    const mainLine = mainGeo ? lineFromGeoJson(mainGeo) : null;
 
     if (mainLine && mainLine.length) {
       mainRouteLayer = L.polyline(mainLine, { weight: 4 });
@@ -170,17 +183,7 @@ function drawRouteOnMap(geometry) {
       layersToFit.push(mainRouteLayer);
     }
 
-    // alternative route, if present
-    if (geometry.alt) {
-      const altLine = lineFromGeoJson(geometry.alt);
-      if (altLine && altLine.length) {
-        altRouteLayer = L.polyline(altLine, { weight: 4, dashArray: "6 6" });
-        altRouteLayer.addTo(map);
-        layersToFit.push(altRouteLayer);
-      }
-    }
-
-    // bridges / hazards
+    // Optional: bridges array
     const bridgePoints = [];
     if (Array.isArray(geometry.bridges)) {
       geometry.bridges.forEach((b) => {
@@ -205,7 +208,6 @@ function drawRouteOnMap(geometry) {
       layersToFit.push(bridgeLayer);
     }
 
-    // Fit map to route
     if (layersToFit.length) {
       const group = L.featureGroup(layersToFit);
       map.fitBounds(group.getBounds().pad(0.2));
@@ -215,15 +217,20 @@ function drawRouteOnMap(geometry) {
   }
 }
 
-/* -------------------- Main action -------------------- */
+/* ---------- Generate button ---------- */
 
 async function handleGenerateClick() {
   clearError();
 
-  const start = document.getElementById("start-postcode")?.value.trim();
-  const dest = document.getElementById("dest-postcode")?.value.trim();
-  const heightStr = document.getElementById("vehicle-height")?.value.trim();
-  const avoidLow = document.getElementById("avoid-low-bridges")?.checked ?? true;
+  const startEl = document.getElementById("start-postcode");
+  const destEl = document.getElementById("dest-postcode");
+  const heightEl = document.getElementById("vehicle-height");
+  const avoidEl = document.getElementById("avoid-low-bridges");
+
+  const start = startEl ? startEl.value.trim() : "";
+  const dest = destEl ? destEl.value.trim() : "";
+  const heightStr = heightEl ? heightEl.value.trim() : "";
+  const avoidLow = avoidEl ? avoidEl.checked : true;
 
   if (!start || !dest || !heightStr) {
     showError("Please enter start, destination and vehicle height.");
@@ -243,7 +250,7 @@ async function handleGenerateClick() {
   }
   setStatus("Contacting RouteSafe engine…");
 
-  try:
+  try {
     const payload = {
       start_postcode: start,
       dest_postcode: dest,
@@ -263,15 +270,15 @@ async function handleGenerateClick() {
     if (!response.ok) {
       let detail = `RouteSafe API error (${response.status})`;
       try {
-        const errBody = await response.json();
-        if (errBody && errBody.detail) {
+        const body = await response.json();
+        if (body && body.detail) {
           detail =
-            typeof errBody.detail === "string"
-              ? errBody.detail
-              : JSON.stringify(errBody.detail);
+            typeof body.detail === "string"
+              ? body.detail
+              : JSON.stringify(body.detail);
         }
       } catch (e) {
-        // ignore JSON failure
+        // ignore
       }
       console.error("API error", detail);
       showError(detail);
@@ -283,10 +290,11 @@ async function handleGenerateClick() {
     console.log("RouteSafe response", data);
 
     updateSummary(data);
+
     if (data.geometry) {
       drawRouteOnMap(data.geometry);
     } else {
-      console.warn("No geometry field in response, leaving base map only.");
+      console.warn("No geometry in response");
     }
 
     setStatus("Route generated.");
@@ -302,7 +310,7 @@ async function handleGenerateClick() {
   }
 }
 
-/* -------------------- Boot -------------------- */
+/* ---------- Boot ---------- */
 
 document.addEventListener("DOMContentLoaded", () => {
   try {
