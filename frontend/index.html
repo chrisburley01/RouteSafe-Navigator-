@@ -3,180 +3,165 @@
 <head>
   <meta charset="UTF-8" />
   <title>RouteSafe Navigator</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 
+  <!-- CSS -->
   <link rel="stylesheet" href="styles.css" />
 
-  <!-- Leaflet CSS -->
+  <!-- Leaflet -->
   <link
     rel="stylesheet"
-    href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
-    integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
+    href="https://unpkg.com/leaflet@1.9.3/dist/leaflet.css"
+    integrity="sha256-sA+e2PK0St3ZLwHCn44UcMAF3M7WZ7m2Rj7m6SG8J20="
     crossorigin=""
   />
-
-  <!-- Leaflet JS -->
   <script
-    src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
-    integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
+    src="https://unpkg.com/leaflet@1.9.3/dist/leaflet.js"
+    integrity="sha256-nND/qJQmYj1bZ8A2H+d2kNvMNFVQVw1Gc7jqDxCjc3s="
     crossorigin=""
   ></script>
 
-  <script src="main.js" defer></script>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 </head>
+
 <body>
   <div class="app-shell">
+
     <!-- HEADER -->
     <header class="rs-header">
       <div class="rs-header-left">
-        <div class="rs-logo-circle">
-          <!-- you can drop a real logo here later -->
-          <span class="rs-logo-text">RS</span>
-        </div>
+        <div class="rs-logo-circle">RS</div>
         <div class="rs-title-block">
           <h1>RouteSafe Navigator</h1>
-          <p>Intelligent low-bridge avoidance for HGVs</p>
+          <p>Low-bridge safe HGV route planner</p>
         </div>
       </div>
       <div class="rs-header-right">
         <div class="rs-pill">v1.1</div>
-        <div class="rs-pill secondary">by RouteSafe AI</div>
+        <div class="rs-pill secondary">BETA</div>
       </div>
     </header>
 
     <!-- ERROR BANNER -->
-    <div id="errorBanner" class="error-banner" style="display:none;"></div>
+    <div id="error-banner" class="error-banner">
+      <span id="error-text"></span>
+    </div>
 
-    <!-- MAIN CONTENT -->
+    <!-- MAIN LAYOUT -->
     <main class="rs-main">
-      <!-- LEFT: FORM + SUMMARY -->
+
+      <!-- LEFT COLUMN -->
       <section class="rs-column">
+
         <!-- FORM CARD -->
         <div class="card">
-          <h2>Plan a Safe Route</h2>
-          <p class="card-subtitle">
-            Enter UK postcodes and your vehicle height. We’ll check the route
-            against low bridges.
-          </p>
+          <h2>Plan route</h2>
+          <p class="status-text" id="status-line">Enter details below.</p>
 
-          <form class="rs-form">
-            <label for="startPostcode">Start location</label>
+          <form id="route-form" class="rs-form">
+
+            <label for="start-postcode">Start postcode</label>
             <input
-              id="startPostcode"
+              id="start-postcode"
               type="text"
               placeholder="e.g. LS27 0BN"
-              autocomplete="postal-code"
             />
 
-            <label for="destPostcode">Destination</label>
+            <label for="dest-postcode">Destination postcode</label>
             <input
-              id="destPostcode"
+              id="dest-postcode"
               type="text"
               placeholder="e.g. M31 4QN"
-              autocomplete="postal-code"
             />
 
-            <label for="vehicleHeight">Vehicle height (m)</label>
+            <label for="vehicle-height">Vehicle height (metres)</label>
             <input
-              id="vehicleHeight"
+              id="vehicle-height"
               type="number"
               step="0.1"
-              min="0"
-              placeholder="e.g. 4.5"
+              min="1"
+              placeholder="e.g. 4.8"
             />
 
             <div class="toggle-row">
               <span>Avoid low bridges</span>
               <label class="switch">
-                <input id="avoidLowBridges" type="checkbox" checked />
+                <input id="avoid-low-bridges" type="checkbox" checked />
                 <span class="slider"></span>
               </label>
             </div>
 
-            <button id="generateRouteBtn" class="primary-btn">
+            <button
+              id="generate-route-btn"
+              type="button"
+              class="primary-btn"
+            >
               Generate safe route
             </button>
 
-            <p id="routeStatusText" class="status-text status-info">
-              Ready to plan your route.
-            </p>
           </form>
         </div>
 
         <!-- SUMMARY CARD -->
         <div class="card">
           <h2>Route summary</h2>
-          <p class="card-subtitle">
-            Distance, ETA, and nearest low bridge along your selected route.
-          </p>
-
-          <div class="summary-row">
-            <div class="summary-item">
-              <span class="label">Risk level</span>
-              <span id="bridgeRiskText" class="risk-pill risk-low">
-                Low risk
-              </span>
-            </div>
-          </div>
+          <p class="card-subtitle">Metrics & bridge risk</p>
 
           <div class="summary-grid">
             <div class="summary-item">
               <span class="label">Distance</span>
-              <span id="distanceText" class="value">–</span>
+              <span id="distance-value" class="value">–</span>
             </div>
             <div class="summary-item">
               <span class="label">Estimated time</span>
-              <span id="timeText" class="value">–</span>
+              <span id="time-value" class="value">–</span>
+            </div>
+            <div class="summary-item">
+              <span class="label">Bridge risk</span>
+              <span id="bridge-risk-value" class="value">–</span>
+            </div>
+            <div class="summary-item">
+              <span class="label">Nearest bridge</span>
+              <span id="nearest-bridge-value" class="value">–</span>
             </div>
             <div class="summary-item full-width">
-              <span class="label">Nearest low bridge</span>
-              <span id="nearestBridgeText" class="value">
-                None on route
-              </span>
+              <span class="label">Risk level</span>
+              <span id="risk-badge" class="risk-pill risk-low">Low</span>
             </div>
           </div>
-
-          <p class="footnote">
-            Uses RouteSafe engine · ORS routing · UK bridge data.
-          </p>
         </div>
+
       </section>
 
-      <!-- RIGHT: MAP -->
+      <!-- RIGHT COLUMN (MAP) -->
       <section class="rs-column">
         <div class="card map-card">
           <div class="map-card-header">
-            <h2>Map view</h2>
-            <div class="chip-row">
-              <span class="chip">
-                RouteSafe engine · ORS + UK bridge data
-              </span>
-            </div>
+            <h2>Map</h2>
           </div>
+
           <div id="map" class="map-container"></div>
 
           <div class="legend">
             <div class="legend-item">
-              <span class="legend-swatch main-route"></span>
-              <span>Main route</span>
+              <span class="legend-swatch main-route"></span>Main route
             </div>
             <div class="legend-item">
-              <span class="legend-swatch alt-route"></span>
-              <span>Alternative route</span>
+              <span class="legend-swatch alt-route"></span>Alternative route
             </div>
             <div class="legend-item">
-              <span class="legend-swatch hazard"></span>
-              <span>Low bridge / hazard</span>
+              <span class="legend-swatch hazard"></span>Low bridge
             </div>
           </div>
         </div>
       </section>
+
     </main>
 
     <!-- FOOTER -->
-    <footer class="rs-footer">
-      <span>© 2025 · RouteSafe AI · HGV low-bridge protection</span>
-    </footer>
+    <footer class="rs-footer">© RouteSafe Navigator</footer>
   </div>
+
+  <!-- MAIN JS -->
+  <script src="main.js"></script>
 </body>
 </html>
