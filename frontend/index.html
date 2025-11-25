@@ -1,655 +1,158 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8" />
-  <title>RouteSafe Navigator v1.1</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
+<script>
+/* ===========================================================
+   ROUTESAFE NAVIGATOR – FRONTEND JS
+   Fully updated for v2 API (distance_km, duration_min, geometry)
+   =========================================================== */
 
-  <!-- Leaflet -->
-  <link
-    rel="stylesheet"
-    href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
-  />
-  <script
-    src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js">
-  </script>
+let map, mainRouteLayer, altRouteLayer, bridgeLayer;
 
-  <style>
-    :root {
-      --rs-bg: #020617;
-      --rs-card: #020924;
-      --rs-card-soft: #020b2f;
-      --rs-text-main: #f9fafb;
-      --rs-text-muted: #a7b3d1;
-      --rs-accent: #2563eb;
-      --rs-accent-soft: rgba(37, 99, 235, 0.2);
-      --rs-border: #1d2750;
-      --rs-success: #16a34a;
-      --rs-warning: #f59e0b;
-      --rs-danger: #dc2626;
-    }
+function initMap() {
+  map = L.map("map").setView([53.8, -1.55], 10);
 
-    * {
-      box-sizing: border-box;
-    }
+  L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+    maxZoom: 20,
+    attribution: "&copy; OpenStreetMap"
+  }).addTo(map);
 
-    body {
-      margin: 0;
-      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
-        sans-serif;
-      background: radial-gradient(circle at top left, #0b173d, #020617 52%);
-      color: var(--rs-text-main);
-      min-height: 100vh;
-    }
+  mainRouteLayer = L.layerGroup().addTo(map);
+  altRouteLayer = L.layerGroup().addTo(map);
+  bridgeLayer = L.layerGroup().addTo(map);
+}
 
-    .page {
-      max-width: 640px;
-      margin: 0 auto;
-      padding: 16px 12px 24px;
-    }
+/* ===========================================================
+   MAIN FUNCTION — CALL API + RENDER MAP + UPDATE SUMMARY
+   =========================================================== */
+async function generateRoute() {
+  const start = document.getElementById("start").value.trim();
+  const dest = document.getElementById("dest").value.trim();
+  const height = parseFloat(
+    document.getElementById("vehicle-height").value.trim()
+  );
+  const avoid = document.getElementById("avoid-low-bridges").checked;
 
-    .badge-small {
-      font-size: 11px;
-      font-weight: 600;
-      letter-spacing: 0.08em;
-      text-transform: uppercase;
-      color: var(--rs-text-muted);
-      margin-bottom: 4px;
-      display: inline-block;
-    }
+  if (!start || !dest || isNaN(height)) {
+    alert("Please enter valid postcodes and vehicle height.");
+    return;
+  }
 
-    .card {
-      border-radius: 24px;
-      background: radial-gradient(circle at top, #07122e, #020617 55%);
-      border: 1px solid rgba(148, 163, 184, 0.08);
-      padding: 18px 18px 16px;
-      margin-bottom: 14px;
-      box-shadow: 0 18px 60px rgba(15, 23, 42, 0.75);
-    }
+  const payload = {
+    start_postcode: start,
+    dest_postcode: dest,
+    vehicle_height_m: height,
+    avoid_low_bridges: avoid
+  };
 
-    .card-header {
-      display: flex;
-      justify-content: space-between;
-      align-items: baseline;
-      gap: 8px;
-      margin-bottom: 8px;
-    }
-
-    .card-title {
-      font-size: 22px;
-      font-weight: 700;
-      letter-spacing: 0.02em;
-    }
-
-    .version-pill {
-      font-size: 11px;
-      padding: 2px 8px;
-      border-radius: 999px;
-      background: rgba(15, 23, 42, 0.9);
-      border: 1px solid rgba(148, 163, 184, 0.3);
-      color: var(--rs-text-muted);
-    }
-
-    .subtitle {
-      font-size: 12px;
-      color: var(--rs-text-muted);
-      margin: 0;
-    }
-
-    .label {
-      font-size: 13px;
-      color: var(--rs-text-muted);
-      margin-bottom: 4px;
-      display: block;
-    }
-
-    .input-row {
-      display: flex;
-      flex-direction: column;
-      gap: 10px;
-      margin-top: 8px;
-    }
-
-    .input-group {
-      display: flex;
-      flex-direction: column;
-      flex: 1;
-    }
-
-    input[type="text"],
-    input[type="number"] {
-      border-radius: 999px;
-      border: 1px solid var(--rs-border);
-      padding: 8px 12px;
-      background: radial-gradient(circle at top, #020617, #02071b 52%);
-      color: var(--rs-text-main);
-      font-size: 14px;
-      outline: none;
-    }
-
-    input::placeholder {
-      color: rgba(148, 163, 184, 0.7);
-    }
-
-    .row-inline {
-      display: flex;
-      gap: 10px;
-    }
-
-    .row-inline > .input-group {
-      flex: 1;
-    }
-
-    .checkbox-row {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      margin-top: 10px;
-      font-size: 13px;
-      color: var(--rs-text-muted);
-    }
-
-    .checkbox-row input[type="checkbox"] {
-      width: 16px;
-      height: 16px;
-      accent-color: var(--rs-accent);
-    }
-
-    .btn-primary {
-      margin-top: 12px;
-      width: 100%;
-      border-radius: 999px;
-      padding: 10px 16px;
-      border: none;
-      font-size: 15px;
-      font-weight: 600;
-      background: linear-gradient(135deg, #2563eb, #4f46e5);
-      color: #e5f0ff;
-      box-shadow: 0 12px 35px rgba(37, 99, 235, 0.6);
-    }
-
-    .btn-primary:active {
-      transform: translateY(1px);
-      box-shadow: 0 8px 22px rgba(37, 99, 235, 0.8);
-    }
-
-    /* Summary grid */
-    .summary-grid {
-      display: grid;
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-      gap: 10px;
-      margin-top: 10px;
-      font-size: 13px;
-    }
-
-    .summary-item-label {
-      color: var(--rs-text-muted);
-      margin-bottom: 2px;
-    }
-
-    .summary-item-value {
-      font-weight: 600;
-      font-size: 15px;
-    }
-
-    .summary-footer {
-      font-size: 11px;
-      color: var(--rs-text-muted);
-      margin-top: 10px;
-    }
-
-    .risk-row {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      margin-top: 10px;
-    }
-
-    .risk-badge {
-      padding: 4px 14px;
-      border-radius: 999px;
-      font-size: 13px;
-      font-weight: 600;
-      border: 1px solid transparent;
-    }
-
-    .risk-low {
-      background: rgba(22, 163, 74, 0.12);
-      color: #bbf7d0;
-      border-color: rgba(22, 163, 74, 0.9);
-    }
-
-    .risk-medium {
-      background: rgba(245, 158, 11, 0.12);
-      color: #facc15;
-      border-color: rgba(245, 158, 11, 0.9);
-    }
-
-    .risk-high {
-      background: rgba(220, 38, 38, 0.16);
-      color: #fecaca;
-      border-color: rgba(248, 113, 113, 0.9);
-    }
-
-    /* Map card */
-    .map-card {
-      margin-top: 8px;
-      border-radius: 26px;
-      border: 1px solid rgba(96, 165, 250, 0.4);
-      padding: 10px;
-      background: radial-gradient(circle at top, #02071f, #020617 56%);
-      box-shadow: inset 0 0 0 1px rgba(15, 23, 42, 0.75);
-    }
-
-    #map {
-      width: 100%;
-      height: 360px;
-      border-radius: 20px;
-      overflow: hidden;
-    }
-
-    .map-legend {
-      margin-top: 10px;
-      font-size: 12px;
-      color: var(--rs-text-muted);
-      display: flex;
-      flex-wrap: wrap;
-      gap: 10px;
-    }
-
-    .legend-item {
-      display: flex;
-      align-items: center;
-      gap: 6px;
-    }
-
-    .legend-dot {
-      width: 12px;
-      height: 3px;
-      border-radius: 999px;
-      background: rgba(148, 163, 184, 0.8);
-    }
-
-    .legend-main {
-      background: #3b82f6;
-    }
-
-    .legend-alt {
-      background: #a855f7;
-    }
-
-    .legend-bridge {
-      width: 8px;
-      height: 8px;
-      border-radius: 999px;
-      background: #f97316;
-    }
-
-    footer {
-      margin-top: 12px;
-      font-size: 11px;
-      color: var(--rs-text-muted);
-      text-align: center;
-    }
-
-    @media (min-width: 720px) {
-      .page {
-        max-width: 720px;
+  try {
+    const response = await fetch(
+      "https://routesafe-navigatorv2.onrender.com/api/route",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload)
       }
+    );
+
+    if (!response.ok) {
+      alert("Sorry – couldn’t generate a route. Check the v2 service.");
+      return;
     }
-  </style>
-</head>
-<body>
-  <div class="page">
-    <!-- Hero card -->
-    <section class="card">
-      <div class="card-header">
-        <div>
-          <div class="badge-small">RS</div>
-          <div class="card-title">RouteSafe Navigator</div>
-          <p class="subtitle">
-            Intelligent low-bridge avoidance for HGVs.
-          </p>
-        </div>
-        <div class="version-pill">v1.1 · RouteSafe AI</div>
-      </div>
-    </section>
 
-    <!-- Plan route -->
-    <section class="card">
-      <div class="card-header" style="margin-bottom: 4px;">
-        <div class="card-title" style="font-size: 18px;">Plan route</div>
-      </div>
-      <p class="subtitle">
-        Enter UK postcodes and vehicle height.
-      </p>
+    const data = await response.json();
+    renderRouteOnMap(data);
+    updateSummaryPanels(data);
+  } catch (err) {
+    alert("Error contacting service.");
+    console.error(err);
+  }
+}
 
-      <form id="route-form">
-        <div class="input-row">
-          <div class="input-group">
-            <label for="start-postcode" class="label">Start postcode</label>
-            <input
-              id="start-postcode"
-              type="text"
-              placeholder="e.g. LS27 0BN"
-              autocomplete="off"
-            />
-          </div>
+/* ===========================================================
+   MAP RENDER
+   =========================================================== */
+function renderRouteOnMap(data) {
+  mainRouteLayer.clearLayers();
+  altRouteLayer.clearLayers();
+  bridgeLayer.clearLayers();
 
-          <div class="input-group">
-            <label for="destination-postcode" class="label">Destination postcode</label>
-            <input
-              id="destination-postcode"
-              type="text"
-              placeholder="e.g. HD5 0RL"
-              autocomplete="off"
-            />
-          </div>
+  if (data.main_route && data.main_route.coords) {
+    const mainCoords = data.main_route.coords.map((c) => [c[1], c[0]]);
+    const mainLine = L.polyline(mainCoords, { color: "#417BFF", weight: 4 });
+    mainRouteLayer.addLayer(mainLine);
+    map.fitBounds(mainLine.getBounds(), { padding: [40, 40] });
+  }
 
-          <div class="row-inline">
-            <div class="input-group">
-              <label for="vehicle-height" class="label"
-                >Vehicle height (metres)</label
-              >
-              <input
-                id="vehicle-height"
-                type="number"
-                step="0.1"
-                min="2.0"
-                max="6.0"
-                placeholder="e.g. 4.5"
-              />
-            </div>
-          </div>
+  if (data.alt_route && data.alt_route.coords) {
+    const altCoords = data.alt_route.coords.map((c) => [c[1], c[0]]);
+    const altLine = L.polyline(altCoords, { color: "#9A4DFF", weight: 3 });
+    altRouteLayer.addLayer(altLine);
+  }
 
-          <div class="checkbox-row">
-            <input id="avoid-low-bridges" type="checkbox" checked />
-            <label for="avoid-low-bridges">Avoid low bridges</label>
-          </div>
-
-          <button type="submit" class="btn-primary">
-            Generate safe route
-          </button>
-        </div>
-      </form>
-    </section>
-
-    <!-- Route summary & risk -->
-    <section class="card">
-      <div class="card-header" style="margin-bottom: 4px;">
-        <div class="card-title" style="font-size: 18px;">Route summary</div>
-      </div>
-      <p class="subtitle">
-        Distance, ETA, and nearest low bridge along your selected route.
-      </p>
-
-      <div class="summary-grid">
-        <div>
-          <div class="summary-item-label">Distance</div>
-          <div id="summary-distance" class="summary-item-value">-</div>
-        </div>
-        <div>
-          <div class="summary-item-label">Estimated time</div>
-          <div id="summary-time" class="summary-item-value">-</div>
-        </div>
-        <div>
-          <div class="summary-item-label">Bridge risk</div>
-          <div id="bridge-risk-text" class="summary-item-value">-</div>
-        </div>
-        <div>
-          <div class="summary-item-label">Nearest bridge</div>
-          <div id="nearest-bridge-text" class="summary-item-value">-</div>
-        </div>
-      </div>
-
-      <div class="risk-row">
-        <span class="summary-item-label">Risk level</span>
-        <span id="risk-level-badge" class="risk-badge risk-low">Low</span>
-      </div>
-
-      <div class="summary-footer">
-        Uses RouteSafe engine · ORS routing · UK bridge data.<br />
-        <span id="route-summary-status"></span>
-      </div>
-    </section>
-
-    <!-- Map -->
-    <section class="card">
-      <div class="card-header" style="margin-bottom: 4px;">
-        <div class="card-title" style="font-size: 18px;">Map</div>
-      </div>
-      <p class="subtitle">
-        RouteSafe engine · ORS + UK bridge data
-      </p>
-
-      <div class="map-card">
-        <div id="map"></div>
-      </div>
-
-      <div class="map-legend">
-        <div class="legend-item">
-          <span class="legend-dot legend-main"></span>
-          <span>Main route</span>
-        </div>
-        <div class="legend-item">
-          <span class="legend-dot legend-alt"></span>
-          <span>Alternative route</span>
-        </div>
-        <div class="legend-item">
-          <span class="legend-bridge"></span>
-          <span>Low bridge</span>
-        </div>
-      </div>
-    </section>
-
-    <footer>
-      © RouteSafe Navigator · Prototype preview
-    </footer>
-  </div>
-
-  <script>
-    const API_BASE = "https://routesafe-navigatorv2.onrender.com";
-
-    let map;
-    let mainRouteLayer, altRouteLayer, bridgeLayer;
-
-    document.addEventListener("DOMContentLoaded", () => {
-      // Init map
-      map = L.map("map", { zoomControl: true }).setView([53.8, -1.6], 11);
-
-      L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-        maxZoom: 19,
-        attribution: "&copy; OpenStreetMap contributors",
-      }).addTo(map);
-
-      const form = document.getElementById("route-form");
-      if (form) {
-        form.addEventListener("submit", (e) => {
-          e.preventDefault();
-          generateRoute();
-        });
-      }
+  if (data.bridges && Array.isArray(data.bridges)) {
+    data.bridges.forEach((b) => {
+      L.circleMarker([b.lat, b.lon], {
+        radius: 6,
+        color: "#ff8800",
+        fillColor: "#ff8800",
+        fillOpacity: 1
+      })
+        .bindPopup(`Low bridge: ${b.height_m}m<br>${b.distance_m}m away`)
+        .addTo(bridgeLayer);
     });
+  }
+}
 
-    async function generateRoute() {
-      const startPostcode = document
-        .getElementById("start-postcode")
-        .value.trim();
-      const destPostcode = document
-        .getElementById("destination-postcode")
-        .value.trim();
-      const vehicleHeight = parseFloat(
-        document.getElementById("vehicle-height").value
-      );
-      const avoidLowBridges = document.getElementById("avoid-low-bridges")
-        .checked;
+/* ===========================================================
+   SUMMARY PANEL UPDATES
+   =========================================================== */
+function updateSummaryPanels(data) {
+  const risk = data.bridge_result?.risk_level || "Unknown";
+  const nearestHeight =
+    data.bridge_result?.nearest_bridge_height_m ?? "-";
+  const nearestDist =
+    data.bridge_result?.nearest_bridge_distance_m ?? "-";
 
-      if (!startPostcode || !destPostcode || isNaN(vehicleHeight)) {
-        alert("Please enter start, destination and vehicle height.");
-        return;
-      }
+  // Update risk badge
+  const badge = document.getElementById("risk-badge");
+  badge.textContent = risk;
+  badge.className = "badge " + risk.toLowerCase();
 
-      setRouteSummaryLoading(true);
+  document.getElementById("bridge-risk").textContent =
+    risk === "High" ? "⚠ Bridge conflict" : risk;
 
-      try {
-        const resp = await fetch(`${API_BASE}/api/route`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            start_postcode: startPostcode,
-            dest_postcode: destPostcode,
-            vehicle_height_m: vehicleHeight,
-            avoid_low_bridges: avoidLowBridges,
-          }),
-        });
+  document.getElementById("nearest-bridge").textContent =
+    nearestHeight !== "-"
+      ? `${nearestHeight}m (${nearestDist}m away)`
+      : "-";
 
-        if (!resp.ok) {
-          throw new Error(`API error ${resp.status}`);
-        }
+  // ======================================================
+  // METRICS — distance & time from v2 backend
+  // ======================================================
+  const metrics =
+    data.metrics ||
+    data.main_route ||
+    {};
 
-        const data = await resp.json();
-        console.log("API response", data);
-        renderRouteOnMap(data);
-        updateSummaryPanels(data);
-      } catch (err) {
-        console.error(err);
-        alert("Sorry – couldn’t generate a route. Check the v2 service.");
-        setRouteSummaryLoading(false);
-      }
-    }
+  const distanceKm =
+    typeof metrics.distance_km === "number"
+      ? metrics.distance_km
+      : null;
 
-    function toLatLngPairs(geometryOrCoords) {
-      if (!geometryOrCoords) return [];
+  const durationMin =
+    typeof metrics.duration_min === "number"
+      ? metrics.duration_min
+      : null;
 
-      // If already [ [lat, lon], ... ]
-      if (
-        Array.isArray(geometryOrCoords) &&
-        Array.isArray(geometryOrCoords[0]) &&
-        geometryOrCoords[0].length === 2
-      ) {
-        const [a, b] = geometryOrCoords[0];
-        // Heuristic: lon is usually between -8 and 2 in UK
-        if (a < -10 || a > 10) {
-          // [lon, lat] -> [lat, lon]
-          return geometryOrCoords.map((c) => [c[1], c[0]]);
-        }
-        return geometryOrCoords;
-      }
+  document.getElementById("summary-distance").textContent =
+    distanceKm ? distanceKm.toFixed(1) + " km" : "-";
 
-      // ORS-style route.geometry.coordinates
-      if (geometryOrCoords.geometry && geometryOrCoords.geometry.coordinates) {
-        return geometryOrCoords.geometry.coordinates.map((c) => [c[1], c[0]]);
-      }
+  document.getElementById("summary-time").textContent =
+    durationMin ? durationMin.toFixed(0) + " mins" : "-";
 
-      if (geometryOrCoords.coords) {
-        return toLatLngPairs(geometryOrCoords.coords);
-      }
-
-      return [];
-    }
-
-    function renderRouteOnMap(data) {
-      [mainRouteLayer, altRouteLayer, bridgeLayer].forEach((layer) => {
-        if (layer && map.hasLayer(layer)) map.removeLayer(layer);
-      });
-
-      const mainCoords = toLatLngPairs(data.main_route);
-      if (mainCoords.length) {
-        mainRouteLayer = L.polyline(mainCoords, { weight: 5 }).addTo(map);
-      }
-
-      const altCoords = toLatLngPairs(data.alt_route);
-      if (altCoords.length) {
-        altRouteLayer = L.polyline(altCoords, {
-          weight: 4,
-          dashArray: "6 6",
-        }).addTo(map);
-      }
-
-      if (Array.isArray(data.bridges) && data.bridges.length > 0) {
-        bridgeLayer = L.layerGroup(
-          data.bridges.map((b) =>
-            L.circleMarker([b.lat, b.lon], { radius: 6 })
-              .bindPopup(
-                `Bridge ${Number(b.height_m).toFixed(2)} m<br/>${(
-                  Number(b.distance_m) / 1000
-                ).toFixed(2)} km from route`
-              )
-          )
-        ).addTo(map);
-      }
-
-      const allLayers = [mainRouteLayer, altRouteLayer, bridgeLayer].filter(
-        Boolean
-      );
-      if (allLayers.length) {
-        const group = L.featureGroup(allLayers);
-        map.fitBounds(group.getBounds().pad(0.2));
-      }
-
-      setRouteSummaryLoading(false);
-    }
-
-    function updateSummaryPanels(data) {
-      const metrics = data.metrics || data.main_route || {};
-
-      const distanceKm =
-        typeof metrics.distance_km === "number"
-          ? metrics.distance_km
-          : typeof metrics.distance === "number"
-          ? metrics.distance / 1000
-          : null;
-
-      const durationMin =
-        typeof metrics.duration_min === "number"
-          ? metrics.duration_min
-          : typeof metrics.duration === "number"
-          ? metrics.duration / 60
-          : null;
-
-      document.getElementById("summary-distance").textContent = distanceKm
-        ? distanceKm.toFixed(1) + " km"
-        : "-";
-
-      document.getElementById("summary-time").textContent = durationMin
-        ? durationMin.toFixed(0) + " mins"
-        : "-";
-
-      const br = data.bridge_result || {};
-      document.getElementById("bridge-risk-text").textContent =
-        br.has_conflict === true
-          ? "Conflict"
-          : br.near_height_limit === true
-          ? "Near limit"
-          : br.has_conflict === false
-          ? "None"
-          : "-";
-
-      const nearestHeight =
-        br.nearest_bridge_height_m ??
-        (br.nearest_bridge && br.nearest_bridge.height_m);
-      document.getElementById("nearest-bridge-text").textContent =
-        typeof nearestHeight === "number"
-          ? nearestHeight.toFixed(2) + " m"
-          : "-";
-
-      const badge = document.getElementById("risk-level-badge");
-      if (badge) {
-        const level = (br.risk_level || "Low").toString();
-        badge.textContent = level;
-        badge.className = "risk-badge";
-        const lower = level.toLowerCase();
-        if (lower.includes("high")) badge.classList.add("risk-high");
-        else if (lower.includes("med")) badge.classList.add("risk-medium");
-        else badge.classList.add("risk-low");
-      }
-    }
-
-    function setRouteSummaryLoading(isLoading) {
-      const el = document.getElementById("route-summary-status");
-      if (!el) return;
-      el.textContent = isLoading ? "Calculating safe route…" : "";
-    }
-  </script>
-</body>
-</html>
+  // Optional – extended status line
+  const statusEl = document.getElementById("route-summary-status");
+  if (statusEl && distanceKm && durationMin) {
+    statusEl.textContent =
+      `Planned route: ${distanceKm.toFixed(1)} km · ${durationMin.toFixed(0)} mins · Risk ${risk}`;
+  }
+}
+</script>
