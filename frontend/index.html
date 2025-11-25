@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>RouteSafe Navigator v1.2</title>
+  <title>RouteSafe Navigator v1.3</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
 
   <!-- Leaflet -->
@@ -82,7 +82,6 @@
       padding:16px; width:90%; max-width:420px;
     }
     #camera-video { width:100%; border-radius:14px; background:black; }
-
   </style>
 </head>
 <body>
@@ -97,7 +96,6 @@
   <!-- Route Planner -->
   <section class="card">
     <div class="card-title">Plan route</div>
-    <p class="subtitle">Enter UK postcodes, height and scan reg.</p>
 
     <form id="route-form">
 
@@ -124,6 +122,11 @@
           </div>
         </div>
       </div>
+
+      <!-- DVLA profile summary -->
+      <div id="vehicle-profile-summary"
+           class="subtitle"
+           style="margin-top:4px; font-size:11px;"></div>
 
       <label class="label" style="margin-top:10px;">
         <input id="avoid-low-bridges" checked type="checkbox" />
@@ -163,7 +166,8 @@
   <div id="camera-box">
     <div style="display:flex; justify-content:space-between; margin-bottom:6px;">
       <span style="color:#fff;">Scan number plate</span>
-      <button id="camera-close" style="background:none; border:none; color:#fff; font-size:18px;">×</button>
+      <button id="camera-close"
+              style="background:none; border:none; color:#fff; font-size:18px;">×</button>
     </div>
 
     <video id="camera-video" autoplay playsinline></video>
@@ -187,8 +191,7 @@ let cameraStream = null;
 document.addEventListener("DOMContentLoaded", () => {
   // Map
   map = L.map("map").setView([53.8, -1.6], 11);
-  L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png")
-    .addTo(map);
+  L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png").addTo(map);
 
   mainRouteLayer = L.layerGroup().addTo(map);
   altRouteLayer = L.layerGroup().addTo(map);
@@ -199,6 +202,14 @@ document.addEventListener("DOMContentLoaded", () => {
       e.preventDefault();
       generateRoute();
     });
+
+  // Reg input manual lookup
+  const regInput = document.getElementById("vehicle-reg");
+  if (regInput) {
+    regInput.addEventListener("blur", () => {
+      loadVehicleProfileFromReg();
+    });
+  }
 
   setupRegCamera();
 });
@@ -258,7 +269,6 @@ async function captureReg(video, statusEl) {
     return;
   }
 
-  // Draw frame
   const canvas = document.createElement("canvas");
   canvas.width  = video.videoWidth;
   canvas.height = video.videoHeight;
@@ -291,10 +301,59 @@ async function captureReg(video, statusEl) {
     document.getElementById("vehicle-reg").value = reg;
     statusEl.textContent = "Detected: " + reg;
 
+    // Load DVLA profile
+    loadVehicleProfileFromReg();
+
     setTimeout(() => closeCameraModal(), 600);
 
-  } catch {
+  } catch (err) {
     statusEl.textContent = "Network error.";
+  }
+}
+
+/* ==============================
+   DVLA LOOKUP
+============================== */
+async function loadVehicleProfileFromReg() {
+  const regInput = document.getElementById("vehicle-reg");
+  if (!regInput) return;
+
+  const raw = regInput.value.trim();
+  const summaryEl = document.getElementById("vehicle-profile-summary");
+
+  if (!raw) {
+    if (summaryEl) summaryEl.textContent = "";
+    return;
+  }
+
+  if (summaryEl) summaryEl.textContent = "Looking up vehicle…";
+
+  try {
+    const resp = await fetch(`${API_BASE}/api/vehicle-profile/${encodeURIComponent(raw)}`);
+    
+    if (!resp.ok) {
+      if (resp.status === 503) summaryEl.textContent = "DVLA not configured.";
+      else if (resp.status === 404) summaryEl.textContent = "Vehicle not found.";
+      else summaryEl.textContent = "Vehicle profile unavailable.";
+      return;
+    }
+
+    const profile = await resp.json();
+
+    const parts = [];
+    if (profile.make) parts.push(profile.make);
+    if (profile.colour) parts.push(profile.colour);
+    if (profile.gross_weight_t) parts.push(`${profile.gross_weight_t.toFixed(1)}t GVW`);
+    if (profile.inferred_class) parts.push(profile.inferred_class.toUpperCase());
+
+    if (summaryEl) {
+      summaryEl.textContent = parts.length
+        ? `DVLA: ${parts.join(" · ")}`
+        : "DVLA profile loaded.";
+    }
+
+  } catch (err) {
+    summaryEl.textContent = "Vehicle profile error.";
   }
 }
 
@@ -305,6 +364,7 @@ async function generateRoute() {
   const start = document.getElementById("start-postcode").value.trim();
   const dest  = document.getElementById("dest-postcode").value.trim();
   const height= parseFloat(document.getElementById("vehicle-height").value);
+  const reg   = document.getElementById("vehicle-reg").value.trim();
   const avoid = document.getElementById("avoid-low-bridges").checked;
 
   if (!start || !dest || isNaN(height)) {
@@ -322,7 +382,8 @@ async function generateRoute() {
         start_postcode:start,
         dest_postcode:dest,
         vehicle_height_m:height,
-        avoid_low_bridges:avoid
+        avoid_low_bridges:avoid,
+        vehicle_reg:reg || null
       })
     });
 
@@ -339,7 +400,6 @@ async function generateRoute() {
     setRouteStatus("ok","Route ready");
 
   } catch (err) {
-    alert("Network error.");
     setRouteStatus("error","Network error");
   }
 }
