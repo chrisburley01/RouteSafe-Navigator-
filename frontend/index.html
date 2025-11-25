@@ -1,836 +1,286 @@
-<!doctype html>
-<html lang="en">
-  <head>
-    <meta charset="utf-8" />
-    <title>RouteSafe Navigator</title>
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-
-    <!-- Leaflet -->
-    <link
-      rel="stylesheet"
-      href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
-      integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
-      crossorigin=""
-    />
-    <script
-      src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
-      integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
-      crossorigin=""
-    ></script>
-
-    <style>
-      :root {
-        --bg: #020617;
-        --bg-card: #020617;
-        --bg-card-soft: #020617;
-        --primary: #4f46e5;
-        --primary-soft: #6366f1;
-        --accent: #22c55e;
-        --danger: #ef4444;
-        --warning: #f97316;
-        --text: #e5e7eb;
-        --muted: #9ca3af;
-      }
-
-      * {
-        box-sizing: border-box;
-      }
-
-      body {
-        margin: 0;
-        min-height: 100vh;
-        font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
-          sans-serif;
-        color: var(--text);
-        background: radial-gradient(circle at top left, #0f172a 0, #020617 55%)
-          fixed;
-      }
-
-      .app {
-        max-width: 960px;
-        margin: 0 auto;
-        padding: 1.5rem 1rem 3rem;
-      }
-
-      @media (min-width: 640px) {
-        .app {
-          padding: 2rem 1.5rem 3.5rem;
-        }
-      }
-
-      .hero-card {
-        border-radius: 1.75rem;
-        padding: 1.75rem;
-        margin-bottom: 1.5rem;
-        background: radial-gradient(circle at top left, #111827 0, #020617 55%);
-        box-shadow: 0 24px 60px rgba(15, 23, 42, 0.9);
-        border: 1px solid rgba(148, 163, 184, 0.2);
-      }
-
-      .hero-header {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        gap: 1rem;
-        margin-bottom: 0.75rem;
-      }
-
-      .hero-title {
-        font-size: 1.3rem;
-        font-weight: 700;
-      }
-
-      .hero-subtitle {
-        font-size: 0.9rem;
-        color: var(--muted);
-      }
-
-      .pill {
-        padding: 0.25rem 0.8rem;
-        border-radius: 999px;
-        font-size: 0.7rem;
-        text-transform: uppercase;
-        letter-spacing: 0.08em;
-        border: 1px solid rgba(148, 163, 184, 0.6);
-        color: var(--muted);
-        white-space: nowrap;
-      }
-
-      .pill span {
-        font-weight: 600;
-        color: var(--text);
-      }
-
-      .plan-card,
-      .summary-card,
-      .map-card {
-        border-radius: 1.5rem;
-        padding: 1.4rem 1.4rem 1.25rem;
-        background: radial-gradient(circle at top left, #020617 0, #020617 60%);
-        border: 1px solid rgba(148, 163, 184, 0.15);
-        box-shadow: 0 18px 40px rgba(15, 23, 42, 0.85);
-        margin-bottom: 1.25rem;
-      }
-
-      .plan-header,
-      .summary-header,
-      .map-header {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        gap: 0.75rem;
-        margin-bottom: 1rem;
-      }
-
-      h2 {
-        margin: 0;
-        font-size: 1.05rem;
-      }
-
-      .status-pill {
-        padding: 0.25rem 0.9rem;
-        border-radius: 999px;
-        font-size: 0.7rem;
-        letter-spacing: 0.06em;
-        text-transform: uppercase;
-        border: 1px solid rgba(148, 163, 184, 0.4);
-        color: var(--muted);
-        white-space: nowrap;
-      }
-
-      .status-pill.ready {
-        border-color: rgba(34, 197, 94, 0.5);
-        color: #bbf7d0;
-      }
-
-      .status-pill.searching {
-        border-color: rgba(249, 115, 22, 0.6);
-        color: #fed7aa;
-      }
-
-      .status-pill.error {
-        border-color: rgba(239, 68, 68, 0.6);
-        color: #fecaca;
-      }
-
-      .form-row {
-        display: flex;
-        flex-direction: column;
-        gap: 0.75rem;
-        margin-bottom: 0.75rem;
-      }
-
-      @media (min-width: 640px) {
-        .form-row--split {
-          flex-direction: row;
-        }
-      }
-
-      .form-field {
-        flex: 1;
-        display: flex;
-        flex-direction: column;
-        gap: 0.25rem;
-      }
-
-      label {
-        font-size: 0.78rem;
-        color: var(--muted);
-      }
-
-      input[type="text"],
-      input[type="number"] {
-        width: 100%;
-        padding: 0.65rem 0.8rem;
-        border-radius: 999px;
-        border: 1px solid rgba(148, 163, 184, 0.25);
-        background: radial-gradient(circle at top left, #020617 0, #020617 60%);
-        color: var(--text);
-        font-size: 0.9rem;
-        outline: none;
-      }
-
-      input::placeholder {
-        color: rgba(148, 163, 184, 0.7);
-      }
-
-      input:focus {
-        border-color: rgba(96, 165, 250, 0.9);
-        box-shadow: 0 0 0 1px rgba(96, 165, 250, 0.5);
-      }
-
-      .reg-field {
-        display: flex;
-        align-items: center;
-        gap: 0.5rem;
-      }
-
-      .reg-field input {
-        flex: 1;
-      }
-
-      .icon-button {
-        width: 2.3rem;
-        height: 2.3rem;
-        border-radius: 999px;
-        border: 1px solid rgba(148, 163, 184, 0.45);
-        background: radial-gradient(circle at top left, #020617 0, #020617 60%);
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-        font-size: 1.2rem;
-        color: var(--muted);
-        cursor: pointer;
-      }
-
-      .checkbox-row {
-        display: flex;
-        align-items: center;
-        gap: 0.5rem;
-        margin: 0.5rem 0 1rem;
-        font-size: 0.85rem;
-        color: var(--muted);
-      }
-
-      .checkbox-row input {
-        width: 1rem;
-        height: 1rem;
-        border-radius: 0.3rem;
-      }
-
-      .primary-button {
-        width: 100%;
-        border-radius: 999px;
-        border: none;
-        padding: 0.85rem 1rem;
-        font-size: 0.95rem;
-        font-weight: 600;
-        cursor: pointer;
-        background: linear-gradient(135deg, #6366f1, #4f46e5);
-        color: white;
-        box-shadow: 0 18px 40px rgba(79, 70, 229, 0.6);
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        gap: 0.4rem;
-      }
-
-      .primary-button:disabled {
-        opacity: 0.6;
-        cursor: default;
-        box-shadow: none;
-      }
-
-      .primary-button span.spinner {
-        width: 1rem;
-        height: 1rem;
-        border-radius: 999px;
-        border: 2px solid rgba(226, 232, 240, 0.4);
-        border-top-color: white;
-        animation: spin 0.7s linear infinite;
-      }
-
-      @keyframes spin {
-        to {
-          transform: rotate(360deg);
-        }
-      }
-
-      .summary-grid {
-        display: grid;
-        grid-template-columns: repeat(2, minmax(0, 1fr));
-        gap: 0.75rem 1rem;
-        margin-bottom: 0.5rem;
-      }
-
-      .summary-item {
-        font-size: 0.85rem;
-      }
-
-      .summary-label {
-        color: var(--muted);
-        margin-bottom: 0.15rem;
-      }
-
-      .summary-value {
-        font-weight: 600;
-      }
-
-      .risk-pill {
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-        padding: 0.3rem 0.95rem;
-        border-radius: 999px;
-        font-size: 0.8rem;
-        font-weight: 600;
-      }
-
-      .risk-low {
-        background: rgba(34, 197, 94, 0.1);
-        color: #bbf7d0;
-        border: 1px solid rgba(34, 197, 94, 0.4);
-      }
-
-      .risk-medium {
-        background: rgba(249, 115, 22, 0.08);
-        color: #fed7aa;
-        border: 1px solid rgba(249, 115, 22, 0.5);
-      }
-
-      .risk-high {
-        background: rgba(239, 68, 68, 0.08);
-        color: #fecaca;
-        border: 1px solid rgba(239, 68, 68, 0.6);
-      }
-
-      .summary-footnote {
-        margin-top: 0.5rem;
-        font-size: 0.75rem;
-        color: var(--muted);
-      }
-
-      .map-container {
-        border-radius: 1.2rem;
-        overflow: hidden;
-        border: 1px solid rgba(148, 163, 184, 0.2);
-      }
-
-      #map {
-        width: 100%;
-        height: 360px;
-      }
-
-      .legend {
-        margin-top: 0.7rem;
-        font-size: 0.75rem;
-        color: var(--muted);
-        display: flex;
-        flex-wrap: wrap;
-        gap: 0.9rem;
-      }
-
-      .legend-item {
-        display: inline-flex;
-        align-items: center;
-        gap: 0.4rem;
-      }
-
-      .legend-swatch {
-        width: 18px;
-        height: 3px;
-        border-radius: 999px;
-      }
-
-      .legend-main {
-        background: #3b82f6;
-      }
-
-      .legend-alt {
-        background: #a855f7;
-      }
-
-      .legend-bridge {
-        width: 10px;
-        height: 10px;
-        border-radius: 999px;
-        background: #f97316;
-      }
-
-      .map-actions {
-        margin-top: 0.9rem;
-        display: flex;
-        justify-content: flex-end;
-      }
-
-      .secondary-button {
-        border-radius: 999px;
-        border: 1px solid rgba(148, 163, 184, 0.45);
-        padding: 0.45rem 0.9rem;
-        font-size: 0.78rem;
-        display: inline-flex;
-        align-items: center;
-        gap: 0.35rem;
-        cursor: pointer;
-        background: radial-gradient(circle at top left, #020617 0, #020617 60%);
-        color: var(--muted);
-      }
-
-      .secondary-button span.icon {
-        font-size: 0.9rem;
-      }
-
-      footer {
-        margin-top: 1.25rem;
-        font-size: 0.7rem;
-        color: #6b7280;
-        text-align: center;
-      }
-    </style>
-  </head>
-
-  <body>
-    <div class="app">
-      <!-- Hero -->
-      <section class="hero-card">
-        <div class="hero-header">
-          <div>
-            <div class="hero-title">RouteSafe Navigator</div>
-            <div class="hero-subtitle">
-              Intelligent low-bridge and HGV routing engine.
-            </div>
-          </div>
-          <div class="pill">
-            v1.1 · <span>RouteSafe AI</span>
-          </div>
-        </div>
-      </section>
-
-      <!-- Plan route -->
-      <section class="plan-card">
-        <div class="plan-header">
-          <h2>Plan route</h2>
-          <div id="status-pill" class="status-pill">Idle</div>
-        </div>
-
-        <p style="margin-top: 0; margin-bottom: 0.9rem; font-size: 0.8rem; color: var(--muted)">
-          Enter UK postcodes, vehicle height and optional weight. Registration
-          is for future DVLA look-ups.
-        </p>
-
-        <div class="form-row">
-          <div class="form-field">
-            <label for="start-postcode">Start postcode</label>
-            <input
-              id="start-postcode"
-              type="text"
-              placeholder="e.g. LS27 0BN"
-              autocomplete="postal-code"
-            />
-          </div>
-        </div>
-
-        <div class="form-row">
-          <div class="form-field">
-            <label for="dest-postcode">Destination postcode</label>
-            <input
-              id="dest-postcode"
-              type="text"
-              placeholder="e.g. HD5 0RL"
-              autocomplete="postal-code"
-            />
-          </div>
-        </div>
-
-        <div class="form-row form-row--split">
-          <div class="form-field">
-            <label for="vehicle-height">Vehicle height (m)</label>
-            <input
-              id="vehicle-height"
-              type="number"
-              step="0.1"
-              min="0"
-              placeholder="e.g. 4.5"
-            />
-          </div>
-          <div class="form-field">
-            <label for="vehicle-weight">Vehicle weight (t)</label>
-            <input
-              id="vehicle-weight"
-              type="number"
-              step="0.1"
-              min="0"
-              placeholder="Optional (e.g. 38)"
-            />
-          </div>
-        </div>
-
-        <div class="form-row">
-          <div class="form-field">
-            <label for="vehicle-reg">Vehicle reg (optional)</label>
-            <div class="reg-field">
-              <input
-                id="vehicle-reg"
-                type="text"
-                placeholder="e.g. YX71 OXC"
-                style="text-transform: uppercase"
-              />
-              <button
-                id="camera-button"
-                type="button"
-                class="icon-button"
-                title="Scan reg (coming soon)"
-              >
-                📷
-              </button>
-            </div>
-          </div>
-        </div>
-
-        <div class="checkbox-row">
-          <input id="avoid-bridges" type="checkbox" checked />
-          <label for="avoid-bridges" style="margin: 0">Avoid low bridges</label>
-        </div>
-
-        <button id="generate-btn" class="primary-button">
-          <span>Generate safe route</span>
-          <span id="btn-spinner" class="spinner" style="display: none"></span>
-        </button>
-      </section>
-
-      <!-- Summary -->
-      <section class="summary-card">
-        <div class="summary-header">
-          <h2>Route summary</h2>
-          <div id="risk-pill" class="risk-pill risk-low" style="display: none">
-            Low
-          </div>
-        </div>
-
-        <div class="summary-grid">
-          <div class="summary-item">
-            <div class="summary-label">Distance</div>
-            <div id="distance-val" class="summary-value">-</div>
-          </div>
-          <div class="summary-item">
-            <div class="summary-label">Estimated time</div>
-            <div id="time-val" class="summary-value">-</div>
-          </div>
-          <div class="summary-item">
-            <div class="summary-label">Bridge risk</div>
-            <div id="bridge-risk-val" class="summary-value">-</div>
-          </div>
-          <div class="summary-item">
-            <div class="summary-label">Nearest bridge</div>
-            <div id="nearest-bridge-val" class="summary-value">-</div>
-          </div>
-        </div>
-
-        <div id="summary-footnote" class="summary-footnote">
-          Uses RouteSafe engine · ORS routing · UK bridge data.
-        </div>
-      </section>
-
-      <!-- Map -->
-      <section class="map-card">
-        <div class="map-header">
-          <h2>Map</h2>
-          <span
-            style="font-size: 0.75rem; color: var(--muted); white-space: nowrap"
-            >RouteSafe engine · ORS + UK bridge data</span
-          >
-        </div>
-
-        <div class="map-container">
-          <div id="map"></div>
-        </div>
-
-        <div class="legend">
-          <div class="legend-item">
-            <span class="legend-swatch legend-main"></span>
-            <span>Main route</span>
-          </div>
-          <div class="legend-item">
-            <span class="legend-swatch legend-alt"></span>
-            <span>Alternative route</span>
-          </div>
-          <div class="legend-item">
-            <span class="legend-bridge"></span>
-            <span>Low bridge</span>
-          </div>
-        </div>
-
-        <div class="map-actions">
-          <button id="google-maps-btn" class="secondary-button" type="button">
-            <span class="icon">🧭</span>
-            <span>Open in Google Maps</span>
-          </button>
-        </div>
-      </section>
-
-      <footer>
-        © RouteSafe Navigator · Prototype preview – not for live navigation.
-      </footer>
-    </div>
-
-    <script>
-      const API_BASE = "https://routesafe-navigatorv2.onrender.com";
-
-      const startInput = document.getElementById("start-postcode");
-      const destInput = document.getElementById("dest-postcode");
-      const heightInput = document.getElementById("vehicle-height");
-      const weightInput = document.getElementById("vehicle-weight");
-      const avoidInput = document.getElementById("avoid-bridges");
-      const generateBtn = document.getElementById("generate-btn");
-      const spinner = document.getElementById("btn-spinner");
-      const statusPill = document.getElementById("status-pill");
-
-      const distanceVal = document.getElementById("distance-val");
-      const timeVal = document.getElementById("time-val");
-      const bridgeRiskVal = document.getElementById("bridge-risk-val");
-      const nearestBridgeVal = document.getElementById("nearest-bridge-val");
-      const riskPill = document.getElementById("risk-pill");
-      const googleMapsBtn = document.getElementById("google-maps-btn");
-
-      let map;
-      let mainLayer = null;
-      let altLayer = null;
-      let bridgeMarkers = [];
-      let lastRouteCoords = null;
-      let lastStartPostcode = "";
-      let lastDestPostcode = "";
-
-      function setStatus(text, mode) {
-        statusPill.textContent = text;
-        statusPill.classList.remove("ready", "searching", "error");
-        if (mode) statusPill.classList.add(mode);
-      }
-
-      function setLoading(isLoading) {
-        if (isLoading) {
-          generateBtn.disabled = true;
-          spinner.style.display = "inline-block";
-        } else {
-          generateBtn.disabled = false;
-          spinner.style.display = "none";
-        }
-      }
-
-      function initMap() {
-        map = L.map("map").setView([53.8, -1.6], 11);
-        L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-          maxZoom: 19,
-          attribution: '&copy; <a href="https://www.openstreetmap.org/">OSM</a>',
-        }).addTo(map);
-      }
-
-      function clearMap() {
-        if (!map) return;
-        if (mainLayer) {
-          map.removeLayer(mainLayer);
-          mainLayer = null;
-        }
-        if (altLayer) {
-          map.removeLayer(altLayer);
-          altLayer = null;
-        }
-        bridgeMarkers.forEach((m) => map.removeLayer(m));
-        bridgeMarkers = [];
-      }
-
-      function toLatLngs(coords) {
-        return coords.map((c) => [c[1], c[0]]);
-      }
-
-      function renderRoute(data) {
-        if (!map) return;
-        clearMap();
-
-        const mainCoords = data.main_route && data.main_route.coords;
-        if (!mainCoords || !mainCoords.length) return;
-
-        const mainLatLngs = toLatLngs(mainCoords);
-        mainLayer = L.polyline(mainLatLngs, { weight: 5 }).addTo(map);
-
-        if (data.alt_route && data.alt_route.coords && data.alt_route.coords.length) {
-          const altLatLngs = toLatLngs(data.alt_route.coords);
-          altLayer = L.polyline(altLatLngs, {
-            weight: 4,
-            dashArray: "6,6",
-            opacity: 0.9,
-            color: "#a855f7",
-          }).addTo(map);
-        }
-
-        (data.conflict_bridges || []).forEach((b) => {
-          const marker = L.circleMarker([b.lat, b.lon], {
-            radius: 6,
-            color: "#f97316",
-            fillColor: "#f97316",
-            fillOpacity: 0.9,
-          }).addTo(map);
-          marker.bindPopup(
-            `Bridge ${b.height_m.toFixed(2)} m<br/>${b.distance_m.toFixed(
-              0
-            )} m from route`
-          );
-          bridgeMarkers.push(marker);
-        });
-
-        const bounds = mainLayer.getBounds();
-        map.fitBounds(bounds, { padding: [25, 25] });
-
-        lastRouteCoords = mainCoords;
-      }
-
-      function updateSummary(data) {
-        const metrics = data.metrics || {};
-        if (metrics.distance_km != null) {
-          distanceVal.textContent = metrics.distance_km.toFixed(1) + " km";
-        } else distanceVal.textContent = "-";
-
-        if (metrics.duration_min != null) {
-          timeVal.textContent = Math.round(metrics.duration_min) + " mins";
-        } else timeVal.textContent = "-";
-
-        bridgeRiskVal.textContent = data.bridge_risk || "-";
-
-        if (data.nearest_bridge_height_m != null) {
-          const h = data.nearest_bridge_height_m.toFixed(2);
-          const d = data.nearest_bridge_distance_m
-            ? data.nearest_bridge_distance_m.toFixed(0) + " m"
-            : "-";
-          nearestBridgeVal.textContent = `${h} m · ${d}`;
-        } else {
-          nearestBridgeVal.textContent = "-";
-        }
-
-        const risk = (data.risk_level || "None").toLowerCase();
-        riskPill.style.display = "inline-flex";
-        riskPill.classList.remove("risk-low", "risk-medium", "risk-high");
-        if (risk === "high") {
-          riskPill.textContent = "High";
-          riskPill.classList.add("risk-high");
-        } else if (risk === "medium") {
-          riskPill.textContent = "Medium";
-          riskPill.classList.add("risk-medium");
-        } else if (risk === "none") {
-          riskPill.textContent = "None";
-          riskPill.classList.add("risk-low");
-        } else {
-          riskPill.textContent = "Low";
-          riskPill.classList.add("risk-low");
-        }
-      }
-
-      async function handleGenerate() {
-        const start = startInput.value.trim();
-        const dest = destInput.value.trim();
-        const height = parseFloat(heightInput.value);
-        const weight = parseFloat(weightInput.value);
-        const avoid = avoidInput.checked;
-
-        if (!start || !dest || !height || height <= 0) {
-          alert("Please enter start, destination and a valid vehicle height.");
-          return;
-        }
-
-        setLoading(true);
-        setStatus("Searching route…", "searching");
-
-        try {
-          const payload = {
-            start_postcode: start,
-            dest_postcode: dest,
-            vehicle_height_m: height,
-            vehicle_weight_t: !isNaN(weight) && weight > 0 ? weight : null,
-            avoid_low_bridges: avoid,
-          };
-
-          const res = await fetch(`${API_BASE}/api/route`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(payload),
-          });
-
-          const data = await res.json();
-          if (!res.ok) {
-            throw new Error(data.detail || "Route API error");
-          }
-
-          updateSummary(data);
-          renderRoute(data);
-          setStatus("Route ready", "ready");
-
-          lastStartPostcode = start;
-          lastDestPostcode = dest;
-        } catch (err) {
-          console.error(err);
-          setStatus("Network error", "error");
-          alert("Sorry – couldn’t generate a route.\n\n" + err.message);
-        } finally {
-          setLoading(false);
-        }
-      }
-
-      function openInGoogleMaps() {
-        if (!lastStartPostcode || !lastDestPostcode) {
-          alert("Generate a route first, then we can open it in Google Maps.");
-          return;
-        }
-
-        let url =
-          "https://www.google.com/maps/dir/?api=1" +
-          "&origin=" +
-          encodeURIComponent(lastStartPostcode) +
-          "&destination=" +
-          encodeURIComponent(lastDestPostcode);
-
-        if (lastRouteCoords && lastRouteCoords.length > 4) {
-          const step = Math.max(1, Math.floor(lastRouteCoords.length / 8));
-          const pts = [];
-          for (let i = step; i < lastRouteCoords.length - step; i += step) {
-            const [lon, lat] = lastRouteCoords[i];
-            pts.push(`${lat},${lon}`);
-          }
-          if (pts.length) {
-            url += "&waypoints=" + encodeURIComponent(pts.join("|"));
-          }
-        }
-
-        window.open(url, "_blank");
-      }
-
-      window.addEventListener("load", () => {
-        initMap();
-        generateBtn.addEventListener("click", handleGenerate);
-        googleMapsBtn.addEventListener("click", openInGoogleMaps);
-        document
-          .getElementById("camera-button")
-          .addEventListener("click", () =>
-            alert("Reg scan via camera will be added in a later build.")
-          );
+<script>
+  let map;
+  let mainRouteLayer = null;
+  let altRouteLayer = null;
+  let bridgeMarkers = [];
+  let lastRouteData = null;
+
+  function initMap() {
+    map = L.map("map").setView([53.7, -1.6], 11);
+
+    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+      attribution: "&copy; OpenStreetMap contributors",
+      maxZoom: 19,
+    }).addTo(map);
+  }
+
+  function setStatus(text, variant) {
+    const badge = document.getElementById("route-status");
+    if (!badge) return;
+
+    badge.textContent = text;
+
+    badge.classList.remove("status-idle", "status-searching", "status-ready", "status-error");
+
+    switch (variant) {
+      case "searching":
+        badge.classList.add("status-searching");
+        break;
+      case "ready":
+        badge.classList.add("status-ready");
+        break;
+      case "error":
+        badge.classList.add("status-error");
+        break;
+      default:
+        badge.classList.add("status-idle");
+    }
+  }
+
+  async function generateRoute(ev) {
+    if (ev) ev.preventDefault();
+
+    const start = document.getElementById("start-postcode").value.trim();
+    const dest = document.getElementById("dest-postcode").value.trim();
+    const heightStr = document.getElementById("vehicle-height").value.trim();
+    const avoidLow = document.getElementById("avoid-low-bridges").checked;
+
+    if (!start || !dest || !heightStr) {
+      alert("Please enter start, destination and vehicle height.");
+      return;
+    }
+
+    const height = parseFloat(heightStr);
+    if (Number.isNaN(height) || height <= 0) {
+      alert("Vehicle height must be a positive number in metres.");
+      return;
+    }
+
+    setStatus("Searching route…", "searching");
+
+    try {
+      const resp = await fetch("https://routesafe-navigatorv2.onrender.com/api/route", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          start_postcode: start,
+          dest_postcode: dest,
+          vehicle_height_m: height,
+          avoid_low_bridges: avoidLow,
+        }),
       });
-    </script>
-  </body>
-</html>
+
+      if (!resp.ok) {
+        console.error("API error:", resp.status, await resp.text());
+        alert("Sorry – couldn’t generate a route. Please try again.");
+        setStatus("Error", "error");
+        return;
+      }
+
+      const data = await resp.json();
+      lastRouteData = data;
+
+      updateSummary(data);
+      updateBridgeCard(data);
+      drawRouteOnMap(data);
+
+      setStatus("Route ready", "ready");
+    } catch (err) {
+      console.error(err);
+      alert("Network error while contacting the navigator service.");
+      setStatus("Error", "error");
+    }
+  }
+
+  function updateSummary(data) {
+    const distanceEl = document.getElementById("summary-distance");
+    const timeEl = document.getElementById("summary-time");
+    const riskEl = document.getElementById("summary-bridge-risk");
+    const nearestEl = document.getElementById("summary-nearest-bridge");
+    const riskBadge = document.getElementById("summary-risk-badge");
+
+    if (!data || !data.metrics) return;
+
+    const km = data.metrics.distance_km ?? null;
+    const mins = data.metrics.duration_min ?? null;
+    const risk = data.bridge_result?.risk_level ?? "Unknown";
+    const nearestHeight = data.bridge_result?.nearest_bridge_height_m ?? null;
+    const nearestDist = data.bridge_result?.nearest_bridge_distance_m ?? null;
+
+    distanceEl.textContent = km != null ? `${km.toFixed(1)} km` : "-";
+    timeEl.textContent = mins != null ? `${Math.round(mins)} mins` : "-";
+    riskEl.textContent = risk;
+
+    if (nearestHeight != null && nearestDist != null) {
+      nearestEl.textContent = `${nearestHeight.toFixed(2)} m · ${Math.round(nearestDist)} m`;
+    } else {
+      nearestEl.textContent = "-";
+    }
+
+    riskBadge.textContent = risk === "Conflict" || risk === "HIGH" ? "High" : "Low";
+
+    riskBadge.classList.remove("risk-low", "risk-high");
+    if (risk === "Conflict" || risk === "HIGH") {
+      riskBadge.classList.add("risk-high");
+    } else {
+      riskBadge.classList.add("risk-low");
+    }
+  }
+
+  function updateBridgeCard(data) {
+    const riskText = document.getElementById("bridge-risk-text");
+    const nearestText = document.getElementById("bridge-nearest-text");
+
+    if (!data || !data.bridge_result) {
+      riskText.textContent = "-";
+      nearestText.textContent = "-";
+      return;
+    }
+
+    const br = data.bridge_result;
+    riskText.textContent = br.risk_level ?? "-";
+
+    if (br.nearest_bridge_height_m != null && br.nearest_bridge_distance_m != null) {
+      nearestText.textContent = `${br.nearest_bridge_height_m.toFixed(2)} m · ${Math.round(
+        br.nearest_bridge_distance_m
+      )} m`;
+    } else {
+      nearestText.textContent = "-";
+    }
+  }
+
+  function clearMap() {
+    if (!map) return;
+
+    if (mainRouteLayer) {
+      map.removeLayer(mainRouteLayer);
+      mainRouteLayer = null;
+    }
+    if (altRouteLayer) {
+      map.removeLayer(altRouteLayer);
+      altRouteLayer = null;
+    }
+    bridgeMarkers.forEach((m) => map.removeLayer(m));
+    bridgeMarkers = [];
+  }
+
+  function drawRouteOnMap(data) {
+    if (!map || !data) return;
+
+    clearMap();
+
+    const mainCoords = data.main_route?.coords || [];
+    const altCoords = data.alt_route?.coords || null;
+    const risk = data.bridge_result?.risk_level || "LOW";
+    const avoidLow = document.getElementById("avoid-low-bridges").checked;
+
+    // Decide which route is the "selected" (safe) one
+    let selectedCoords = mainCoords;
+    let secondaryCoords = altCoords;
+    let selectedType = "main";
+
+    if (
+      (risk === "Conflict" || risk === "HIGH") &&
+      avoidLow &&
+      altCoords &&
+      altCoords.length > 1
+    ) {
+      selectedCoords = altCoords;
+      secondaryCoords = mainCoords;
+      selectedType = "alt";
+    }
+
+    // Draw selected route – thick solid line
+    if (selectedCoords && selectedCoords.length > 1) {
+      mainRouteLayer = L.polyline(selectedCoords, { weight: 6 }).addTo(map);
+      map.fitBounds(mainRouteLayer.getBounds(), { padding: [20, 20] });
+    }
+
+    // Draw the "other" route – thinner dashed line
+    if (secondaryCoords && secondaryCoords.length > 1) {
+      altRouteLayer = L.polyline(secondaryCoords, { weight: 4, dashArray: "6,4" }).addTo(map);
+    }
+
+    // Low-bridge markers (nearest only for now)
+    if (data.bridge_result?.nearest_bridge_lat && data.bridge_result?.nearest_bridge_lon) {
+      const marker = L.circleMarker(
+        [data.bridge_result.nearest_bridge_lat, data.bridge_result.nearest_bridge_lon],
+        { radius: 6 }
+      ).addTo(map);
+      bridgeMarkers.push(marker);
+    }
+
+    // Store what we decided so the Google Maps button can use it
+    lastRouteData = {
+      ...data,
+      _selected_type: selectedType,
+    };
+  }
+
+  function openInGoogleMaps() {
+    if (!lastRouteData) return;
+
+    const risk = lastRouteData.bridge_result?.risk_level || "LOW";
+    const avoidLow = document.getElementById("avoid-low-bridges").checked;
+
+    let coords = lastRouteData.main_route.coords;
+
+    // If there is a conflict + avoid low bridges + alt route ⇒ use alt route
+    if (
+      (risk === "Conflict" || risk === "HIGH") &&
+      avoidLow &&
+      lastRouteData.alt_route &&
+      lastRouteData.alt_route.coords &&
+      lastRouteData.alt_route.coords.length > 1
+    ) {
+      coords = lastRouteData.alt_route.coords;
+    }
+
+    if (!coords || coords.length < 2) return;
+
+    const origin = coords[0];
+    const dest = coords[coords.length - 1];
+
+    const originStr = `${origin[0]},${origin[1]}`;
+    const destStr = `${dest[0]},${dest[1]}`;
+
+    // Sample intermediate points as waypoints (max 8)
+    const maxWaypoints = 8;
+    const step = Math.max(1, Math.floor(coords.length / (maxWaypoints + 1)));
+    const waypoints = [];
+
+    for (let i = step; i < coords.length - 1 && waypoints.length < maxWaypoints; i += step) {
+      const [lat, lon] = coords[i];
+      waypoints.push(`${lat},${lon}`);
+    }
+
+    let url = `https://www.google.com/maps/dir/?api=1&origin=${encodeURIComponent(
+      originStr
+    )}&destination=${encodeURIComponent(destStr)}`;
+
+    if (waypoints.length) {
+      url += `&waypoints=${encodeURIComponent(waypoints.join("|"))}`;
+    }
+
+    window.open(url, "_blank");
+  }
+
+  document.addEventListener("DOMContentLoaded", () => {
+    initMap();
+
+    const form = document.getElementById("route-form");
+    if (form) {
+      form.addEventListener("submit", generateRoute);
+    }
+
+    const btn = document.getElementById("generate-route-btn");
+    if (btn) {
+      btn.addEventListener("click", generateRoute);
+    }
+
+    const gmapsBtn = document.getElementById("open-google-maps-btn");
+    if (gmapsBtn) {
+      gmapsBtn.addEventListener("click", openInGoogleMaps);
+    }
+  });
+</script>
