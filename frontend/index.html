@@ -2,452 +2,940 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>RouteSafe Navigator v1.3</title>
+  <title>RouteSafe Navigator</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
 
   <!-- Leaflet -->
-  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
-  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <link
+    rel="stylesheet"
+    href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+    integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
+    crossorigin=""
+  />
+  <script
+    src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+    integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
+    crossorigin=""
+  ></script>
 
   <style>
     :root {
-      --rs-bg: #020617;
-      --rs-card: #020924;
-      --rs-text-main: #f9fafb;
-      --rs-text-muted: #a7b3d1;
-      --rs-accent: #2563eb;
-      --rs-border: #1d2750;
-      --rs-success: #16a34a;
-      --rs-warning: #f59e0b;
-      --rs-danger: #dc2626;
+      --bg: #020617;
+      --bg-card: #02061f;
+      --bg-card-soft: #05091f;
+      --border-soft: #1e293b;
+      --accent: #4f46e5;
+      --accent-soft: #6366f1;
+      --accent-alt: #a855f7;
+      --text-main: #e5e7eb;
+      --text-muted: #9ca3af;
+      --danger: #ef4444;
+      --success: #16a34a;
+      --warning: #f59e0b;
+    }
+
+    * {
+      box-sizing: border-box;
     }
 
     body {
-      margin:0;
-      font-family: system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
-      background: radial-gradient(circle at top left,#0b173d,#020617 52%);
-      color:var(--rs-text-main);
+      margin: 0;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
+        sans-serif;
+      background: radial-gradient(circle at top left, #0b1120, #020617 55%);
+      color: var(--text-main);
     }
 
-    .page { max-width:640px; margin:0 auto; padding:16px; }
+    .page {
+      max-width: 960px;
+      margin: 0 auto;
+      padding: 1.25rem 1rem 4rem;
+    }
+
+    h1,
+    h2,
+    h3 {
+      margin: 0;
+    }
+
+    /* Header */
+
+    .header-card {
+      background: radial-gradient(circle at top left, #111827, #020617 60%);
+      border-radius: 24px;
+      padding: 1.5rem 1.5rem 1.25rem;
+      border: 1px solid var(--border-soft);
+      box-shadow: 0 18px 40px rgba(15, 23, 42, 0.9);
+      margin-bottom: 1.5rem;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .header-card::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background: radial-gradient(
+        circle at top right,
+        rgba(79, 70, 229, 0.45),
+        transparent 55%
+      );
+      opacity: 0.7;
+      pointer-events: none;
+    }
+
+    .header-main {
+      position: relative;
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 1rem;
+    }
+
+    .header-title-block span.rs-tag {
+      font-size: 0.8rem;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--text-muted);
+    }
+
+    .header-title {
+      font-size: 1.8rem;
+      font-weight: 700;
+      margin-top: 0.25rem;
+    }
+
+    .header-subtitle {
+      margin-top: 0.5rem;
+      font-size: 0.95rem;
+      color: var(--text-muted);
+    }
+
+    .header-version-pill {
+      border-radius: 999px;
+      padding: 0.35rem 0.85rem;
+      border: 1px solid rgba(148, 163, 184, 0.6);
+      font-size: 0.8rem;
+      color: #e5e7eb;
+      background: rgba(15, 23, 42, 0.8);
+      white-space: nowrap;
+    }
+
+    /* Cards */
 
     .card {
-      background:radial-gradient(circle at top,#07122e,#020617 55%);
-      border-radius:24px;
-      padding:18px;
-      border:1px solid rgba(148,163,184,0.08);
-      margin-bottom:14px;
-      box-shadow:0 18px 60px rgba(15,23,42,0.75);
+      background: radial-gradient(circle at top left, #050816, #020617 60%);
+      border-radius: 24px;
+      border: 1px solid var(--border-soft);
+      padding: 1.5rem 1.25rem 1.25rem;
+      margin-bottom: 1.25rem;
+      box-shadow: 0 14px 30px rgba(15, 23, 42, 0.85);
     }
 
-    .card-title { font-size:20px; font-weight:700; }
-    .subtitle { font-size:12px; color:var(--rs-text-muted); }
-
-    .label { font-size:13px; color:var(--rs-text-muted); margin-bottom:4px; }
-
-    input[type="text"], input[type="number"] {
-      width:100%; border-radius:999px; border:1px solid var(--rs-border);
-      padding:8px 12px; background: #02071b; color:#fff;
+    .card-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      margin-bottom: 0.75rem;
     }
 
-    .btn-primary {
-      width:100%; border-radius:999px; border:none;
-      background:linear-gradient(135deg,#2563eb,#4f46e5);
-      padding:10px 16px; color:#fff; font-weight:600;
-      margin-top:12px;
+    .card-title {
+      font-size: 1.15rem;
+      font-weight: 600;
     }
+
+    .card-subtitle {
+      font-size: 0.85rem;
+      color: var(--text-muted);
+    }
+
+    /* Form */
+
+    .form-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(0, 1fr));
+      gap: 0.8rem;
+      margin-bottom: 1rem;
+    }
+
+    .form-field {
+      display: flex;
+      flex-direction: column;
+      gap: 0.25rem;
+    }
+
+    .form-label {
+      font-size: 0.82rem;
+      color: var(--text-muted);
+    }
+
+    .input-wrapper {
+      position: relative;
+    }
+
+    .input {
+      width: 100%;
+      padding: 0.75rem 0.85rem;
+      border-radius: 999px;
+      border: 1px solid rgba(148, 163, 184, 0.45);
+      background: radial-gradient(circle at top left, #020617, #020617);
+      color: var(--text-main);
+      font-size: 0.95rem;
+      outline: none;
+      transition: border-color 0.12s ease, box-shadow 0.12s ease;
+    }
+
+    .input::placeholder {
+      color: #6b7280;
+    }
+
+    .input:focus {
+      border-color: var(--accent-soft);
+      box-shadow: 0 0 0 1px rgba(79, 70, 229, 0.6);
+    }
+
+    .reg-scan-btn {
+      position: absolute;
+      top: 50%;
+      right: 0.35rem;
+      transform: translateY(-50%);
+      border-radius: 999px;
+      border: none;
+      padding: 0.35rem 0.55rem;
+      background: radial-gradient(circle at top, #111827, #020617);
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+    }
+
+    .reg-scan-btn span {
+      font-size: 1.2rem;
+    }
+
+    .reg-scan-btn:active {
+      transform: translateY(-50%) scale(0.97);
+    }
+
+    .checkbox-row {
+      display: flex;
+      align-items: center;
+      gap: 0.45rem;
+      margin-bottom: 1rem;
+      font-size: 0.9rem;
+      color: var(--text-main);
+    }
+
+    .checkbox-row input[type="checkbox"] {
+      width: 1rem;
+      height: 1rem;
+      accent-color: var(--accent-soft);
+    }
+
+    .route-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.75rem;
+      align-items: center;
+    }
+
+    .primary-button {
+      border-radius: 999px;
+      border: none;
+      padding: 0.8rem 1.8rem;
+      font-size: 0.95rem;
+      font-weight: 600;
+      background: linear-gradient(135deg, #4f46e5, #6366f1);
+      color: #e5e7eb;
+      cursor: pointer;
+      box-shadow: 0 12px 26px rgba(59, 130, 246, 0.55);
+      transition: transform 0.1s ease, box-shadow 0.1s ease, filter 0.1s ease;
+    }
+
+    .primary-button:active {
+      transform: translateY(1px);
+      box-shadow: 0 6px 16px rgba(59, 130, 246, 0.4);
+      filter: brightness(0.97);
+    }
+
+    .primary-button:disabled {
+      opacity: 0.55;
+      cursor: not-allowed;
+      box-shadow: none;
+    }
+
+    .secondary-button {
+      padding: 0.6rem 1.25rem;
+      border-radius: 999px;
+      border: 1px solid rgba(59, 130, 246, 0.75);
+      background: transparent;
+      color: var(--text-main);
+      font-size: 0.85rem;
+      font-weight: 500;
+      cursor: pointer;
+    }
+
+    .secondary-button:disabled {
+      opacity: 0.45;
+      cursor: not-allowed;
+    }
+
+    .route-status-pill {
+      border-radius: 999px;
+      padding: 0.4rem 0.9rem;
+      font-size: 0.78rem;
+      font-weight: 500;
+      text-transform: none;
+      background: rgba(22, 163, 74, 0.1);
+      color: var(--success);
+      border: 1px solid rgba(22, 163, 74, 0.55);
+    }
+
+    .route-status-pill.error {
+      background: rgba(239, 68, 68, 0.1);
+      color: var(--danger);
+      border-color: rgba(239, 68, 68, 0.7);
+    }
+
+    .route-status-pill.searching {
+      background: rgba(245, 158, 11, 0.08);
+      color: var(--warning);
+      border-color: rgba(245, 158, 11, 0.7);
+    }
+
+    /* Summary */
+
+    .summary-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 0.75rem 1.25rem;
+      margin-bottom: 1rem;
+    }
+
+    .summary-item-label {
+      font-size: 0.8rem;
+      color: var(--text-muted);
+    }
+
+    .summary-item-value {
+      font-size: 1.05rem;
+      font-weight: 600;
+    }
+
+    .risk-chip {
+      display: inline-flex;
+      align-items: center;
+      border-radius: 999px;
+      padding: 0.35rem 0.9rem;
+      font-size: 0.83rem;
+      font-weight: 600;
+      margin-top: 0.25rem;
+    }
+
+    .risk-low {
+      background: rgba(22, 163, 74, 0.1);
+      color: var(--success);
+      border: 1px solid rgba(22, 163, 74, 0.7);
+    }
+
+    .risk-medium {
+      background: rgba(245, 158, 11, 0.12);
+      color: var(--warning);
+      border: 1px solid rgba(245, 158, 11, 0.8);
+    }
+
+    .risk-high {
+      background: rgba(239, 68, 68, 0.12);
+      color: var(--danger);
+      border: 1px solid rgba(239, 68, 68, 0.8);
+    }
+
+    .summary-footer {
+      font-size: 0.8rem;
+      color: var(--text-muted);
+      margin-top: 0.4rem;
+    }
+
+    /* Map */
 
     #map {
-      width:100%; height:360px;
-      border-radius:18px; overflow:hidden;
+      width: 100%;
+      height: 360px;
+      border-radius: 24px;
+      overflow: hidden;
+      border: 1px solid rgba(30, 64, 175, 0.6);
     }
 
-    .route-status { margin-top:8px; text-align:right; }
-    .status-pill {
-      display:inline-block; padding:4px 12px; font-size:11px;
-      border-radius:999px; border:1px solid transparent;
+    .map-legend {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.75rem;
+      margin-top: 0.75rem;
+      font-size: 0.8rem;
+      color: var(--text-muted);
     }
-    .status-pill.loading { background:rgba(248,113,113,0.15); border-color:rgba(248,113,113,0.8); }
-    .status-pill.ok { background:rgba(22,163,74,0.15); border-color:rgba(22,163,74,0.9); }
-    .status-pill.error { background:rgba(220,38,38,0.18); border-color:rgba(220,38,38,0.9); }
-    .status-pill.idle { border:1px solid rgba(148,163,184,0.4); color:var(--rs-text-muted); }
 
-    /* Camera modal */
-    #camera-modal {
-      position:fixed; inset:0; background:rgba(0,0,0,0.85);
-      display:none; align-items:center; justify-content:center; z-index:9999;
+    .legend-item {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.3rem;
     }
-    #camera-box {
-      background:#020617; border:1px solid #1d2750; border-radius:20px;
-      padding:16px; width:90%; max-width:420px;
+
+    .legend-swatch {
+      width: 16px;
+      height: 3px;
+      border-radius: 999px;
     }
-    #camera-video { width:100%; border-radius:14px; background:black; }
+
+    .swatch-main {
+      background: #3b82f6;
+    }
+
+    .swatch-alt {
+      background: #a855f7;
+    }
+
+    .swatch-lowbridge {
+      width: 10px;
+      height: 10px;
+      border-radius: 999px;
+      background: #f97316;
+    }
+
+    footer {
+      margin-top: 2rem;
+      font-size: 0.75rem;
+      color: #6b7280;
+      text-align: center;
+    }
+
+    @media (max-width: 640px) {
+      .header-main {
+        flex-direction: column;
+        align-items: flex-start;
+      }
+
+      .summary-grid {
+        grid-template-columns: minmax(0, 1fr);
+      }
+    }
   </style>
 </head>
 <body>
-<div class="page">
-
-  <!-- Header -->
-  <section class="card">
-    <div class="card-title">RouteSafe Navigator</div>
-    <p class="subtitle">Intelligent low-bridge and HGV routing engine.</p>
-  </section>
-
-  <!-- Route Planner -->
-  <section class="card">
-    <div class="card-title">Plan route</div>
-
-    <form id="route-form">
-
-      <label class="label">Start postcode</label>
-      <input id="start-postcode" type="text" placeholder="LS27 0BN"/>
-
-      <label class="label" style="margin-top:10px;">Destination postcode</label>
-      <input id="dest-postcode" type="text" placeholder="HD5 0RL"/>
-
-      <div style="display:flex; gap:10px; margin-top:10px;">
-        <div style="flex:1;">
-          <label class="label">Vehicle height (m)</label>
-          <input id="vehicle-height" type="number" step="0.1" placeholder="4.5"/>
+  <div class="page">
+    <!-- HEADER -->
+    <section class="header-card">
+      <div class="header-main">
+        <div class="header-title-block">
+          <span class="rs-tag">RS</span>
+          <div class="header-title">RouteSafe Navigator</div>
+          <div class="header-subtitle">
+            Intelligent low-bridge and HGV routing engine.
+          </div>
         </div>
-        <div style="flex:1;">
-          <label class="label">Vehicle reg</label>
-          <div style="display:flex; gap:6px;">
-            <input id="vehicle-reg" type="text" placeholder="YX71 ABC" style="flex:1;"/>
-            <button type="button" id="scan-reg-btn"
-              style="border-radius:999px; border:1px solid var(--rs-border);
-                     background:#02071b; color:#fff; padding:6px 12px;">
-              📷
+        <div class="header-version-pill">v1.2 · RouteSafe AI</div>
+      </div>
+    </section>
+
+    <!-- PLAN ROUTE -->
+    <section class="card">
+      <div class="card-header">
+        <div>
+          <div class="card-title">Plan route</div>
+          <div class="card-subtitle">
+            Enter UK postcodes, height and scan reg.
+          </div>
+        </div>
+      </div>
+
+      <div class="form-grid">
+        <div class="form-field">
+          <label class="form-label" for="startPostcode">Start postcode</label>
+          <div class="input-wrapper">
+            <input
+              id="startPostcode"
+              class="input"
+              placeholder="e.g. LS27 0BN"
+              autocomplete="postal-code"
+            />
+          </div>
+        </div>
+
+        <div class="form-field">
+          <label class="form-label" for="destPostcode"
+            >Destination postcode</label
+          >
+          <div class="input-wrapper">
+            <input
+              id="destPostcode"
+              class="input"
+              placeholder="e.g. HD5 0RL"
+              autocomplete="postal-code"
+            />
+          </div>
+        </div>
+      </div>
+
+      <div class="form-grid">
+        <div class="form-field">
+          <label class="form-label" for="vehicleHeight"
+            >Vehicle height (m)</label
+          >
+          <div class="input-wrapper">
+            <input
+              id="vehicleHeight"
+              class="input"
+              placeholder="e.g. 4.5"
+              inputmode="decimal"
+            />
+          </div>
+        </div>
+
+        <div class="form-field">
+          <label class="form-label" for="vehicleReg">Vehicle reg</label>
+          <div class="input-wrapper">
+            <input
+              id="vehicleReg"
+              class="input"
+              placeholder="Scan or type reg"
+              maxlength="10"
+            />
+            <button
+              id="scanRegBtn"
+              type="button"
+              class="reg-scan-btn"
+              title="Scan registration"
+            >
+              <span>📷</span>
             </button>
           </div>
         </div>
       </div>
 
-      <!-- DVLA profile summary -->
-      <div id="vehicle-profile-summary"
-           class="subtitle"
-           style="margin-top:4px; font-size:11px;"></div>
-
-      <label class="label" style="margin-top:10px;">
-        <input id="avoid-low-bridges" checked type="checkbox" />
-        Avoid low bridges
-      </label>
-
-      <button class="btn-primary" type="submit">Generate safe route</button>
-
-      <div class="route-status">
-        <span id="route-status-pill" class="status-pill idle">Ready</span>
+      <div class="checkbox-row">
+        <input id="avoidLowBridges" type="checkbox" checked />
+        <label for="avoidLowBridges">Avoid low bridges</label>
       </div>
-    </form>
-  </section>
 
-  <!-- Summary -->
-  <section class="card">
-    <div class="card-title">Route summary</div>
-    <div style="margin-top:8px;">
-      <div class="subtitle">Distance: <span id="summary-distance">-</span></div>
-      <div class="subtitle">Time: <span id="summary-time">-</span></div>
-      <div class="subtitle">Bridge risk: <span id="bridge-risk-text">-</span></div>
-      <div class="subtitle">Nearest bridge: <span id="nearest-bridge-text">-</span></div>
-    </div>
-    <div id="route-summary-status" class="subtitle" style="margin-top:10px;"></div>
-  </section>
+      <div class="route-actions">
+        <button id="generateRouteBtn" class="primary-button">
+          Generate safe route
+        </button>
 
-  <!-- Map -->
-  <section class="card">
-    <div class="card-title">Map</div>
-    <div id="map"></div>
-  </section>
+        <div id="routeStatusPill" class="route-status-pill">Route ready</div>
 
-</div>
+        <button
+          id="openGoogleMapsBtn"
+          class="secondary-button"
+          type="button"
+          disabled
+        >
+          Open in Google Maps
+        </button>
+      </div>
 
-<!-- CAMERA MODAL -->
-<div id="camera-modal">
-  <div id="camera-box">
-    <div style="display:flex; justify-content:space-between; margin-bottom:6px;">
-      <span style="color:#fff;">Scan number plate</span>
-      <button id="camera-close"
-              style="background:none; border:none; color:#fff; font-size:18px;">×</button>
-    </div>
+      <!-- hidden file input for reg scan -->
+      <input
+        id="regImageInput"
+        type="file"
+        accept="image/*"
+        capture="environment"
+        style="display: none"
+      />
+    </section>
 
-    <video id="camera-video" autoplay playsinline></video>
+    <!-- ROUTE SUMMARY -->
+    <section class="card">
+      <div class="card-header">
+        <div>
+          <div class="card-title">Route summary</div>
+          <div class="card-subtitle">
+            Distance, ETA, and nearest low bridge along your selected route.
+          </div>
+        </div>
+      </div>
 
-    <button id="camera-capture"
-      style="margin-top:8px; width:100%; border:none; border-radius:999px;
-             padding:10px 0; font-weight:600; background:#2563eb; color:#fff;">
-      Capture & detect
-    </button>
+      <div class="summary-grid">
+        <div>
+          <div class="summary-item-label">Distance</div>
+          <div id="summaryDistance" class="summary-item-value">–</div>
+        </div>
+        <div>
+          <div class="summary-item-label">Estimated time</div>
+          <div id="summaryTime" class="summary-item-value">–</div>
+        </div>
+        <div>
+          <div class="summary-item-label">Bridge risk</div>
+          <div id="summaryBridgeRisk" class="summary-item-value">–</div>
+        </div>
+        <div>
+          <div class="summary-item-label">Nearest bridge</div>
+          <div id="summaryNearestBridge" class="summary-item-value">–</div>
+        </div>
+      </div>
 
-    <div id="camera-status" style="margin-top:6px; font-size:12px; color:#9ca3af;"></div>
+      <div>
+        <div class="summary-item-label">Risk level</div>
+        <div id="riskLevelChip" class="risk-chip risk-low">Low</div>
+      </div>
+
+      <div class="summary-footer" id="summaryFooter">
+        Uses RouteSafe engine · ORS routing · UK bridge data.
+      </div>
+    </section>
+
+    <!-- MAP -->
+    <section class="card">
+      <div class="card-header">
+        <div>
+          <div class="card-title">Map</div>
+          <div class="card-subtitle">
+            RouteSafe engine · ORS + UK bridge data
+          </div>
+        </div>
+      </div>
+
+      <div id="map"></div>
+
+      <div class="map-legend">
+        <div class="legend-item">
+          <span class="legend-swatch swatch-main"></span> Main route
+        </div>
+        <div class="legend-item">
+          <span class="legend-swatch swatch-alt"></span> Alternative route
+        </div>
+        <div class="legend-item">
+          <span class="swatch-lowbridge"></span> Low bridge
+        </div>
+      </div>
+    </section>
+
+    <footer>
+      © RouteSafe Navigator · Prototype preview
+    </footer>
   </div>
-</div>
 
-<script>
-const API_BASE = "https://routesafe-navigatorv2.onrender.com";
+  <script>
+    // =========================
+    // Map initialisation
+    // =========================
+    let map;
+    let mainRouteLine;
+    let altRouteLine;
+    let lowBridgeLayer;
 
-let map, mainRouteLayer, altRouteLayer, bridgeLayer;
-let cameraStream = null;
+    let currentMainRouteCoords = null;
 
-document.addEventListener("DOMContentLoaded", () => {
-  // Map
-  map = L.map("map").setView([53.8, -1.6], 11);
-  L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png").addTo(map);
+    function initMap() {
+      map = L.map("map", {
+        zoomControl: true,
+      }).setView([53.8, -1.6], 11);
 
-  mainRouteLayer = L.layerGroup().addTo(map);
-  altRouteLayer = L.layerGroup().addTo(map);
-  bridgeLayer  = L.layerGroup().addTo(map);
+      L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+        attribution: '&copy; OpenStreetMap contributors',
+      }).addTo(map);
 
-  document.getElementById("route-form")
-    .addEventListener("submit", (e) => {
-      e.preventDefault();
-      generateRoute();
-    });
+      mainRouteLine = L.polyline([], { weight: 5 }).addTo(map);
+      altRouteLine = L.polyline([], { weight: 4, dashArray: "6,6" }).addTo(map);
+      lowBridgeLayer = L.layerGroup().addTo(map);
+    }
 
-  // Reg input manual lookup
-  const regInput = document.getElementById("vehicle-reg");
-  if (regInput) {
-    regInput.addEventListener("blur", () => {
-      loadVehicleProfileFromReg();
-    });
-  }
+    // =========================
+    // UI helpers
+    // =========================
+    const statusPill = document.getElementById("routeStatusPill");
+    const generateBtn = document.getElementById("generateRouteBtn");
+    const openGoogleMapsBtn = document.getElementById("openGoogleMapsBtn");
 
-  setupRegCamera();
-});
+    const distanceEl = document.getElementById("summaryDistance");
+    const timeEl = document.getElementById("summaryTime");
+    const bridgeRiskEl = document.getElementById("summaryBridgeRisk");
+    const nearestBridgeEl = document.getElementById("summaryNearestBridge");
+    const riskChip = document.getElementById("riskLevelChip");
+    const summaryFooter = document.getElementById("summaryFooter");
 
-function setRouteStatus(mode, text) {
-  const el = document.getElementById("route-status-pill");
-  el.className = "status-pill " + mode;
-  el.textContent = text;
-}
+    function setStatusSearching() {
+      statusPill.textContent = "Searching for route…";
+      statusPill.classList.remove("error");
+      statusPill.classList.add("searching");
+      generateBtn.disabled = true;
+    }
 
-/* ==============================
-   REG CAMERA SETUP
-============================== */
-function setupRegCamera() {
-  const scanBtn = document.getElementById("scan-reg-btn");
-  const modal   = document.getElementById("camera-modal");
-  const video   = document.getElementById("camera-video");
-  const closeBtn= document.getElementById("camera-close");
-  const snapBtn = document.getElementById("camera-capture");
-  const status  = document.getElementById("camera-status");
+    function setStatusSuccess() {
+      statusPill.textContent = "Route ready";
+      statusPill.classList.remove("error", "searching");
+      generateBtn.disabled = false;
+    }
 
-  scanBtn.onclick = async () => {
-    modal.style.display = "flex";
-    status.textContent = "Opening camera…";
+    function setStatusError(msg) {
+      statusPill.textContent = msg || "Network error";
+      statusPill.classList.remove("searching");
+      statusPill.classList.add("error");
+      generateBtn.disabled = false;
+    }
 
-    try {
-      cameraStream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode:"environment" }
+    function setRiskChip(levelText) {
+      const level = (levelText || "").toLowerCase();
+      riskChip.textContent = levelText || "Unknown";
+      riskChip.classList.remove("risk-low", "risk-medium", "risk-high");
+
+      if (level === "low") {
+        riskChip.classList.add("risk-low");
+      } else if (level === "medium") {
+        riskChip.classList.add("risk-medium");
+      } else if (level === "high" || level === "conflict") {
+        riskChip.classList.add("risk-high");
+      } else {
+        riskChip.classList.add("risk-medium");
+      }
+    }
+
+    function formatMinutes(mins) {
+      if (!mins && mins !== 0) return "–";
+      const m = Math.round(mins);
+      const h = Math.floor(m / 60);
+      const rem = m % 60;
+      if (h === 0) return `${rem} mins`;
+      if (rem === 0) return `${h} hr`;
+      return `${h} hr ${rem} mins`;
+    }
+
+    // =========================
+    // Route handling
+    // =========================
+    async function fetchRoute() {
+      const start = document.getElementById("startPostcode").value.trim();
+      const dest = document.getElementById("destPostcode").value.trim();
+      const heightStr = document.getElementById("vehicleHeight").value.trim();
+      const reg = document.getElementById("vehicleReg").value.trim();
+      const avoid = document.getElementById("avoidLowBridges").checked;
+
+      if (!start || !dest || !heightStr) {
+        alert("Please enter start, destination and vehicle height.");
+        return;
+      }
+
+      const height = parseFloat(heightStr.replace(",", "."));
+      if (Number.isNaN(height) || height <= 0) {
+        alert("Please enter a valid vehicle height in metres.");
+        return;
+      }
+
+      setStatusSearching();
+      openGoogleMapsBtn.disabled = true;
+
+      try {
+        const resp = await fetch("/api/route", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            start_postcode: start,
+            dest_postcode: dest,
+            vehicle_height_m: height,
+            avoid_low_bridges: avoid,
+            vehicle_reg: reg || null,
+          }),
+        });
+
+        if (!resp.ok) {
+          throw new Error(`API error: ${resp.status}`);
+        }
+
+        const data = await resp.json();
+        applyRouteResponse(data);
+        setStatusSuccess();
+      } catch (err) {
+        console.error(err);
+        setStatusError("Network error");
+      }
+    }
+
+    function applyRouteResponse(data) {
+      if (!data) return;
+
+      const metrics = data.metrics || {};
+      const bridgeResult = data.bridge_result || {};
+      const mainRoute = data.main_route || {};
+      const altRoute = data.alt_route || null;
+      const lowBridges = data.low_bridges || [];
+
+      // Summary
+      distanceEl.textContent =
+        metrics.distance_km != null
+          ? `${metrics.distance_km.toFixed(1)} km`
+          : "–";
+      timeEl.textContent = formatMinutes(metrics.duration_min);
+
+      const bridgeRisk = bridgeResult.bridge_risk || "Unknown";
+      bridgeRiskEl.textContent = bridgeRisk;
+
+      if (bridgeResult.nearest_bridge_height_m != null) {
+        nearestBridgeEl.textContent =
+          bridgeResult.nearest_bridge_height_m.toFixed(3) + " m";
+      } else {
+        nearestBridgeEl.textContent = "–";
+      }
+
+      setRiskChip(bridgeResult.risk_level || bridgeRisk);
+
+      summaryFooter.textContent =
+        `Uses RouteSafe engine · ORS routing · UK bridge data. ` +
+        `Planned route: ${
+          metrics.distance_km ? metrics.distance_km.toFixed(1) + " km" : "–"
+        } · ${
+          metrics.duration_min ? formatMinutes(metrics.duration_min) : "–"
+        } · Risk ${bridgeResult.risk_level || bridgeRisk}`;
+
+      // Map draw
+      const coordsMain = mainRoute.coords || [];
+      const coordsAlt = altRoute && altRoute.coords ? altRoute.coords : [];
+
+      // API returns [lon, lat] from ORS, reverse for Leaflet
+      const toLatLng = (c) => [c[1], c[0]];
+
+      mainRouteLine.setLatLngs(coordsMain.map(toLatLng));
+      altRouteLine.setLatLngs(coordsAlt.map(toLatLng));
+
+      lowBridgeLayer.clearLayers();
+      lowBridges.forEach((b) => {
+        if (b && b.lat != null && b.lon != null) {
+          L.circleMarker([b.lat, b.lon], {
+            radius: 6,
+            color: "#f97316",
+            fillColor: "#f97316",
+            fillOpacity: 0.9,
+          })
+            .bindPopup(
+              `Bridge ${b.height_m.toFixed(3)} m · ${b.distance_m.toFixed(
+                0
+              )} m off route`
+            )
+            .addTo(lowBridgeLayer);
+        }
       });
-      video.srcObject = cameraStream;
-      status.textContent = "Point at number plate, then tap capture.";
-    } catch {
-      status.textContent = "Camera blocked.";
+
+      const allPoints = [
+        ...coordsMain.map(toLatLng),
+        ...coordsAlt.map(toLatLng),
+      ];
+      if (allPoints.length > 0) {
+        map.fitBounds(L.latLngBounds(allPoints), { padding: [30, 30] });
+      }
+
+      currentMainRouteCoords = coordsMain;
+      openGoogleMapsBtn.disabled = currentMainRouteCoords.length < 2;
     }
-  };
 
-  closeBtn.onclick = () => closeCameraModal();
-  snapBtn.onclick  = () => captureReg(video, status);
-}
+    // =========================
+    // Google Maps deep link
+    // =========================
+    function openInGoogleMaps() {
+      if (!currentMainRouteCoords || currentMainRouteCoords.length < 2) {
+        alert("Generate a route first.");
+        return;
+      }
 
-function closeCameraModal() {
-  const modal = document.getElementById("camera-modal");
-  modal.style.display = "none";
+      const coords = currentMainRouteCoords;
+      const maxWaypoints = 10;
+      const step = Math.max(1, Math.floor(coords.length / maxWaypoints));
+      const sampled = coords.filter((_, idx) => idx % step === 0);
 
-  if (cameraStream) {
-    cameraStream.getTracks().forEach(t => t.stop());
-    cameraStream = null;
-  }
-}
+      const origin = sampled[0];
+      const destination = sampled[sampled.length - 1];
+      const middle = sampled.slice(1, -1);
 
-/* ==============================
-   CAPTURE FRAME + SEND TO API
-============================== */
-async function captureReg(video, statusEl) {
-  if (!video.videoWidth) {
-    statusEl.textContent = "Camera not ready.";
-    return;
-  }
+      const originStr = `${origin[1]},${origin[0]}`; // lat,lon
+      const destStr = `${destination[1]},${destination[0]}`;
 
-  const canvas = document.createElement("canvas");
-  canvas.width  = video.videoWidth;
-  canvas.height = video.videoHeight;
-  canvas.getContext("2d").drawImage(video, 0,0);
+      let url =
+        `https://www.google.com/maps/dir/?api=1` +
+        `&origin=${encodeURIComponent(originStr)}` +
+        `&destination=${encodeURIComponent(destStr)}` +
+        `&travelmode=driving`;
 
-  const blob = await new Promise(res => canvas.toBlob(res,"image/jpeg",0.8));
-  const formData = new FormData();
-  formData.append("image", blob, "reg.jpg");
+      if (middle.length) {
+        const wp = middle
+          .map((c) => `${c[1]},${c[0]}`)
+          .join("|");
+        url += `&waypoints=${encodeURIComponent(wp)}`;
+      }
 
-  statusEl.textContent = "Detecting…";
+      window.open(url, "_blank");
+    }
 
-  try {
-    const resp = await fetch(`${API_BASE}/api/scan-reg`, {
-      method:"POST",
-      body: formData
+    // =========================
+    // Reg scan (camera -> /api/scan-reg)
+    // =========================
+    async function handleRegScan(file) {
+      if (!file) return;
+
+      const formData = new FormData();
+      formData.append("image", file);
+
+      const regInput = document.getElementById("vehicleReg");
+
+      try {
+        statusPill.textContent = "Scanning registration…";
+        statusPill.classList.add("searching");
+
+        const resp = await fetch("/api/scan-reg", {
+          method: "POST",
+          body: formData,
+        });
+
+        if (!resp.ok) {
+          throw new Error(`Scan failed: ${resp.status}`);
+        }
+
+        const data = await resp.json();
+        if (data && data.reg) {
+          regInput.value = String(data.reg).toUpperCase();
+          setStatusSuccess();
+        } else {
+          setStatusError("Could not read reg");
+        }
+      } catch (err) {
+        console.error(err);
+        setStatusError("Scan error");
+      } finally {
+        document.getElementById("regImageInput").value = "";
+      }
+    }
+
+    // =========================
+    // Wire up events
+    // =========================
+    document.addEventListener("DOMContentLoaded", () => {
+      initMap();
+
+      document
+        .getElementById("generateRouteBtn")
+        .addEventListener("click", (e) => {
+          e.preventDefault();
+          fetchRoute();
+        });
+
+      openGoogleMapsBtn.addEventListener("click", (e) => {
+        e.preventDefault();
+        openInGoogleMaps();
+      });
+
+      const scanRegBtn = document.getElementById("scanRegBtn");
+      const regImageInput = document.getElementById("regImageInput");
+
+      scanRegBtn.addEventListener("click", () => {
+        regImageInput.click();
+      });
+
+      regImageInput.addEventListener("change", (e) => {
+        const file = e.target.files[0];
+        if (file) {
+          handleRegScan(file);
+        }
+      });
     });
-    const data = await resp.json();
-
-    if (!resp.ok) {
-      statusEl.textContent = "Error: " + resp.status;
-      return;
-    }
-
-    const reg = data.reg || "";
-    if (!reg) {
-      statusEl.textContent = "No plate detected.";
-      return;
-    }
-
-    document.getElementById("vehicle-reg").value = reg;
-    statusEl.textContent = "Detected: " + reg;
-
-    // Load DVLA profile
-    loadVehicleProfileFromReg();
-
-    setTimeout(() => closeCameraModal(), 600);
-
-  } catch (err) {
-    statusEl.textContent = "Network error.";
-  }
-}
-
-/* ==============================
-   DVLA LOOKUP
-============================== */
-async function loadVehicleProfileFromReg() {
-  const regInput = document.getElementById("vehicle-reg");
-  if (!regInput) return;
-
-  const raw = regInput.value.trim();
-  const summaryEl = document.getElementById("vehicle-profile-summary");
-
-  if (!raw) {
-    if (summaryEl) summaryEl.textContent = "";
-    return;
-  }
-
-  if (summaryEl) summaryEl.textContent = "Looking up vehicle…";
-
-  try {
-    const resp = await fetch(`${API_BASE}/api/vehicle-profile/${encodeURIComponent(raw)}`);
-    
-    if (!resp.ok) {
-      if (resp.status === 503) summaryEl.textContent = "DVLA not configured.";
-      else if (resp.status === 404) summaryEl.textContent = "Vehicle not found.";
-      else summaryEl.textContent = "Vehicle profile unavailable.";
-      return;
-    }
-
-    const profile = await resp.json();
-
-    const parts = [];
-    if (profile.make) parts.push(profile.make);
-    if (profile.colour) parts.push(profile.colour);
-    if (profile.gross_weight_t) parts.push(`${profile.gross_weight_t.toFixed(1)}t GVW`);
-    if (profile.inferred_class) parts.push(profile.inferred_class.toUpperCase());
-
-    if (summaryEl) {
-      summaryEl.textContent = parts.length
-        ? `DVLA: ${parts.join(" · ")}`
-        : "DVLA profile loaded.";
-    }
-
-  } catch (err) {
-    summaryEl.textContent = "Vehicle profile error.";
-  }
-}
-
-/* ==============================
-   ROUTE GENERATION
-============================== */
-async function generateRoute() {
-  const start = document.getElementById("start-postcode").value.trim();
-  const dest  = document.getElementById("dest-postcode").value.trim();
-  const height= parseFloat(document.getElementById("vehicle-height").value);
-  const reg   = document.getElementById("vehicle-reg").value.trim();
-  const avoid = document.getElementById("avoid-low-bridges").checked;
-
-  if (!start || !dest || isNaN(height)) {
-    alert("Enter start, dest and height.");
-    return;
-  }
-
-  setRouteStatus("loading","Searching…");
-
-  try {
-    const resp = await fetch(`${API_BASE}/api/route`,{
-      method:"POST",
-      headers:{"Content-Type":"application/json"},
-      body:JSON.stringify({
-        start_postcode:start,
-        dest_postcode:dest,
-        vehicle_height_m:height,
-        avoid_low_bridges:avoid,
-        vehicle_reg:reg || null
-      })
-    });
-
-    const text = await resp.text();
-    if (!resp.ok) {
-      alert("Error " + resp.status + ":\n" + text);
-      setRouteStatus("error","Error");
-      return;
-    }
-
-    const data = JSON.parse(text);
-    renderRoute(data);
-    updateSummary(data);
-    setRouteStatus("ok","Route ready");
-
-  } catch (err) {
-    setRouteStatus("error","Network error");
-  }
-}
-
-function toLatLng(coords) {
-  if (!coords) return [];
-  return coords.map(c => [c[0], c[1]]);
-}
-
-function renderRoute(data) {
-  mainRouteLayer.clearLayers();
-  altRouteLayer.clearLayers();
-  bridgeLayer.clearLayers();
-
-  const main = toLatLng(data.main_route?.coords);
-  if (main.length) {
-    const line = L.polyline(main,{color:"#3b82f6",weight:5});
-    mainRouteLayer.addLayer(line);
-    map.fitBounds(line.getBounds().pad(0.2));
-  }
-
-  const alt = toLatLng(data.alt_route?.coords);
-  if (alt.length) {
-    altRouteLayer.addLayer(
-      L.polyline(alt,{color:"#a855f7",weight:3, dashArray:"6 6"})
-    );
-  }
-
-  (data.bridges||[]).forEach(b=>{
-    L.circleMarker([b.lat,b.lon],{
-      radius:6, color:"#f97316", fillColor:"#f97316", fillOpacity:1
-    }).addTo(bridgeLayer);
-  });
-}
-
-function updateSummary(data) {
-  const m = data.metrics;
-  document.getElementById("summary-distance").textContent =
-    m.distance_km.toFixed(1)+" km";
-  document.getElementById("summary-time").textContent =
-    m.duration_min.toFixed(0)+" mins";
-
-  const br = data.bridge_result;
-  document.getElementById("bridge-risk-text").textContent = br.risk_level;
-  document.getElementById("nearest-bridge-text").textContent =
-    br.nearest_bridge_height_m ? br.nearest_bridge_height_m+" m" : "-";
-}
-</script>
-
+  </script>
 </body>
 </html>
