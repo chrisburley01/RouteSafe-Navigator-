@@ -107,7 +107,6 @@ class BridgeEngine:
                 [],
             )
 
-        # Reduce computation by sampling route
         step = max(1, len(coords) // 80)
         points = coords[::step]
 
@@ -194,69 +193,6 @@ def geocode_postcode(pc: str) -> Tuple[float, float]:
 
 
 # ============================================================
-# ORS ROUTES
-# ============================================================
-
-def get_hgv_route(start_lat, start_lon, end_lat, end_lon):
-    body = {
-        "coordinates": [[start_lon, start_lat], [end_lon, end_lat]]
-    }
-    data = ors_request("POST", ORS_DIRECTIONS_URL, body=body)
-    feats = data.get("features") or []
-    if not feats:
-        raise HTTPException(status_code=502, detail="ORS returned no routes")
-
-    feat = feats[0]
-    seg = feat["properties"]["segments"][0]
-
-    coords = feat["geometry"]["coordinates"]
-    latlon = [[c[1], c[0]] for c in coords]
-
-    return latlon, seg["distance"] / 1000, seg["duration"] / 60
-
-
-def get_hgv_route_avoiding_bridges(start_lat, start_lon, end_lat, end_lon, bridges, buffer_m=150):
-    if not bridges:
-        raise HTTPException(status_code=400, detail="No bridges to avoid")
-
-    buffer_deg = buffer_m / 111_000.0
-    multipoly = []
-
-    for b in bridges:
-        lat, lon = b.lat, b.lon
-        ring = [
-            [lon - buffer_deg, lat - buffer_deg],
-            [lon + buffer_deg, lat - buffer_deg],
-            [lon + buffer_deg, lat + buffer_deg],
-            [lon - buffer_deg, lat + buffer_deg],
-            [lon - buffer_deg, lat - buffer_deg],
-        ]
-        multipoly.append([ring])
-
-    body = {
-        "coordinates": [[start_lon, start_lat], [end_lon, end_lat]],
-        "options": {
-            "avoid_polygons": {
-                "type": "MultiPolygon",
-                "coordinates": multipoly,
-            }
-        }
-    }
-    data = ors_request("POST", ORS_DIRECTIONS_URL, body=body)
-    feats = data.get("features") or []
-    if not feats:
-        raise HTTPException(status_code=502, detail="ORS alt route failed")
-
-    feat = feats[0]
-    seg = feat["properties"]["segments"][0]
-
-    coords = feat["geometry"]["coordinates"]
-    latlon = [[c[1], c[0]] for c in coords]
-
-    return latlon, seg["distance"] / 1000, seg["duration"] / 60
-
-
-# ============================================================
 # DVLA LOOKUP
 # ============================================================
 
@@ -306,7 +242,7 @@ def map_dvla_to_profile(reg_norm: str, data: dict) -> VehicleProfile:
 
 
 # ============================================================
-# MODELS FOR ROUTES
+# ROUTE MODELS
 # ============================================================
 
 class RouteRequest(BaseModel):
@@ -315,6 +251,7 @@ class RouteRequest(BaseModel):
     vehicle_height_m: float
     avoid_low_bridges: bool = True
     vehicle_reg: Optional[str] = None
+    gross_weight_kg: Optional[int] = None  # NEW for weight routing
 
 
 class RouteGeometry(BaseModel):
@@ -355,15 +292,16 @@ class RegScanResponse(BaseModel):
 # FASTAPI APP
 # ============================================================
 
-app = FastAPI(title="RouteSafe Navigator API", version="1.3")
+app = FastAPI(title="RouteSafe Navigator API", version="1.4")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # adjust for prod if needed
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
 
 @app.get("/")
 def root():
@@ -376,18 +314,18 @@ def health():
 
 
 # ============================================================
-# REG SCAN
+# REG SCAN (Stub)
 # ============================================================
 
 @app.post("/api/scan-reg", response_model=RegScanResponse)
 async def scan_reg(image: UploadFile = File(...)):
+    # Stub: replace with actual ANPR model
     _ = await image.read()
-    # Stubbed ANPR for now
     return RegScanResponse(reg="YX71ABC", confidence=0.95)
 
 
 # ============================================================
-# DVLA VEHICLE PROFILE ENDPOINT
+# DVLA PROFILE ENDPOINT
 # ============================================================
 
 @app.get("/api/vehicle-profile/{reg}", response_model=VehicleProfile)
@@ -413,8 +351,10 @@ def get_vehicle_profile(reg: str):
 
     if resp.status_code == 404:
         raise HTTPException(status_code=404, detail="Vehicle not found")
+
     if resp.status_code == 400:
         raise HTTPException(status_code=400, detail="Bad registration number")
+
     if resp.status_code >= 500:
         raise HTTPException(status_code=503, detail="DVLA service error")
 
@@ -423,17 +363,131 @@ def get_vehicle_profile(reg: str):
 
 
 # ============================================================
-# ROUTING ENDPOINT
+# ORS ROUTING WITH VEHICLE PARAMETERS
+# ============================================================
+
+def build_vehicle_params(height_m: float, gross_weight_kg: Optional[int]) -> dict:
+    params = {}
+
+    # Height → mm
+    if height_m:
+        params["height"] = int(height_m * 1000)
+
+    # Weight + axle load
+    if gross_weight_kg:
+        params["weight"] = gross_weight_kg
+        params["axleload"] = int(gross_weight_kg / 4)
+
+    # Standard artic size
+    params["length"] = 13600  # mm
+    params["width"] = 2550    # mm
+
+    return params
+
+
+def get_hgv_route(start_lat, start_lon, end_lat, end_lon, vehicle_params):
+    body = {
+        "coordinates": [[start_lon, start_lat], [end_lon, end_lat]],
+        "vehicle_type": "heavyvehicle",
+        "vehicle_parameters": vehicle_params,
+    }
+    data = ors_request("POST", ORS_DIRECTIONS_URL, body=body)
+
+    feats = data.get("features") or []
+    if not feats:
+        raise HTTPException(status_code=502, detail="ORS returned no routes")
+
+    feat = feats[0]
+    seg = feat["properties"]["segments"][0]
+
+    coords = feat["geometry"]["coordinates"]
+    latlon = [[c[1], c[0]] for c in coords]
+
+    return latlon, seg["distance"] / 1000, seg["duration"] / 60
+
+
+def get_hgv_route_avoiding_bridges(start_lat, start_lon, end_lat, end_lon, bridges, veh_params, buffer_m=150):
+    if not bridges:
+        raise HTTPException(status_code=400, detail="No bridges to avoid")
+
+    buffer_deg = buffer_m / 111_000.0
+
+    multipoly = []
+    for b in bridges:
+        lat, lon = b.lat, b.lon
+        ring = [
+            [lon - buffer_deg, lat - buffer_deg],
+            [lon + buffer_deg, lat - buffer_deg],
+            [lon + buffer_deg, lat + buffer_deg],
+            [lon - buffer_deg, lat + buffer_deg],
+            [lon - buffer_deg, lat - buffer_deg],
+        ]
+        multipoly.append([ring])
+
+    body = {
+        "coordinates": [[start_lon, start_lat], [end_lon, end_lat]],
+        "vehicle_type": "heavyvehicle",
+        "vehicle_parameters": veh_params,
+        "options": {
+            "avoid_polygons": {
+                "type": "MultiPolygon",
+                "coordinates": multipoly,
+            }
+        }
+    }
+
+    data = ors_request("POST", ORS_DIRECTIONS_URL, body=body)
+
+    feats = data.get("features") or []
+    if not feats:
+        raise HTTPException(status_code=502, detail="ORS alt route failed")
+
+    feat = feats[0]
+    seg = feat["properties"]["segments"][0]
+
+    coords = feat["geometry"]["coordinates"]
+    latlon = [[c[1], c[0]] for c in coords]
+
+    return latlon, seg["distance"] / 1000, seg["duration"] / 60
+
+
+# ============================================================
+# MAIN ROUTE ENDPOINT
 # ============================================================
 
 @app.post("/api/route", response_model=RouteResponse)
 def plan_route(req: RouteRequest):
-    # 1. Geocode
+
+    # ----------------------------------------------------------
+    # Geocoding
+    # ----------------------------------------------------------
     start_lat, start_lon = geocode_postcode(req.start_postcode)
     end_lat, end_lon = geocode_postcode(req.dest_postcode)
 
-    # 2. Base route
-    base_coords, base_dist, base_dur = get_hgv_route(start_lat, start_lon, end_lat, end_lon)
+    # ----------------------------------------------------------
+    # VEHICLE WEIGHT (DVLA overrides user)
+    # ----------------------------------------------------------
+    gross_weight_kg = req.gross_weight_kg
+
+    if req.vehicle_reg:
+        try:
+            profile = get_vehicle_profile(req.vehicle_reg)
+            if profile and profile.revenue_weight_kg:
+                gross_weight_kg = profile.revenue_weight_kg
+        except Exception:
+            pass  # DVLA errors should not break routing
+
+    # ----------------------------------------------------------
+    # Vehicle parameters for ORS
+    # ----------------------------------------------------------
+    vehicle_params = build_vehicle_params(req.vehicle_height_m, gross_weight_kg)
+
+    # ----------------------------------------------------------
+    # BASE ROUTE
+    # ----------------------------------------------------------
+    base_coords, base_dist, base_dur = get_hgv_route(
+        start_lat, start_lon, end_lat, end_lon, vehicle_params
+    )
 
     chosen_coords = base_coords
     chosen_dist = base_dist
@@ -442,7 +496,9 @@ def plan_route(req: RouteRequest):
     alt_geom = None
     bridges_for_map: List[BridgeInfo] = []
 
-    # 3. Bridge scan
+    # ----------------------------------------------------------
+    # BRIDGE SCAN
+    # ----------------------------------------------------------
     if req.avoid_low_bridges:
         scan_result, nearby_bridges = bridge_engine.scan_route(
             base_coords, req.vehicle_height_m
@@ -455,12 +511,15 @@ def plan_route(req: RouteRequest):
         )
         nearby_bridges = []
 
-    # 4. Alternative route attempt
+    # ----------------------------------------------------------
+    # ALTERNATIVE ROUTE
+    # ----------------------------------------------------------
     if req.avoid_low_bridges and scan_result.has_conflict and nearby_bridges:
         try:
             alt_coords, alt_dist, alt_dur = get_hgv_route_avoiding_bridges(
-                start_lat, start_lon, end_lat, end_lon, nearby_bridges
+                start_lat, start_lon, end_lat, end_lon, nearby_bridges, vehicle_params
             )
+
             alt_scan, alt_nearby = bridge_engine.scan_route(
                 alt_coords, req.vehicle_height_m
             )
@@ -469,7 +528,7 @@ def plan_route(req: RouteRequest):
                 alt_geom = RouteGeometry(
                     coords=base_coords,
                     distance_km=base_dist,
-                    duration_min=base_dur,
+                    duration_min=base_dur
                 )
                 chosen_coords = alt_coords
                 chosen_dist = alt_dist
@@ -480,13 +539,15 @@ def plan_route(req: RouteRequest):
                 alt_geom = RouteGeometry(
                     coords=alt_coords,
                     distance_km=alt_dist,
-                    duration_min=alt_dur,
+                    duration_min=alt_dur
                 )
 
-        except HTTPException as e:
-            print("No alternative route:", e.detail)
+        except HTTPException:
+            pass
 
-    # 5. Bridge markers
+    # ----------------------------------------------------------
+    # BRIDGE MARKERS FOR MAP
+    # ----------------------------------------------------------
     for b in nearby_bridges:
         d = bridge_engine.haversine_m(
             chosen_coords[0][0], chosen_coords[0][1], b.lat, b.lon
@@ -495,7 +556,9 @@ def plan_route(req: RouteRequest):
             BridgeInfo(lat=b.lat, lon=b.lon, height_m=b.height_m, distance_m=d)
         )
 
-    # 6. Build response
+    # ----------------------------------------------------------
+    # BUILD RESPONSE
+    # ----------------------------------------------------------
     main_geom = RouteGeometry(
         coords=chosen_coords, distance_km=chosen_dist, duration_min=chosen_dur
     )
