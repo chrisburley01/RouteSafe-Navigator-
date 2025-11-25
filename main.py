@@ -1,37 +1,33 @@
-# main.py
-#
-# RouteSafe Navigator v2 backend
-# FastAPI + ORS + simple low-bridge engine
-
 from __future__ import annotations
 
 import csv
 import json
 import math
 import os
+from dataclasses import dataclass
+from typing import List, Optional, Tuple, Dict
+
 import urllib.parse
 import urllib.request
-from dataclasses import dataclass
-from typing import List, Optional, Tuple
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
-# ============== Config ==============
+# ================== Config ==================
 
 ORS_API_KEY = os.getenv("ORS_API_KEY")
-
-ORS_GEOCODE_URL = "https://api.openrouteservice.org/geocode/search"
-ORS_DIRECTIONS_URL = (
-    "https://api.openrouteservice.org/v2/directions/driving-hgv"
-)
+if not ORS_API_KEY:
+  # We don't crash app, but /api/route will raise a clear 500
+  print("WARNING: ORS_API_KEY is not set – /api/route will fail until configured.")
 
 BRIDGE_CSV_PATH = "bridge_heights_clean.csv"
-
 EARTH_RADIUS_M = 6371000.0
 
-# ============== Bridge engine ==============
+ORS_GEOCODE_URL = "https://api.openrouteservice.org/geocode/search"
+ORS_DIRECTIONS_URL = "https://api.openrouteservice.org/v2/directions/driving-hgv/geojson"
+
+# ================== Bridge engine ==================
 
 
 @dataclass
@@ -42,7 +38,7 @@ class Bridge:
 
 
 @dataclass
-class BridgeCheckResult:
+class BridgeScanResult:
     has_conflict: bool
     near_height_limit: bool
     nearest_bridge: Optional[Bridge]
@@ -52,9 +48,8 @@ class BridgeCheckResult:
 
 class BridgeEngine:
     """
-    Very simple low-bridge checker.
-    Loads a CSV of bridges, then samples points along the route polyline
-    and looks for nearby bridges that are lower than the vehicle height.
+    Loads low-bridge data from CSV and can scan a route polyline
+    for bridges that are too low for a given vehicle height.
     """
 
     def __init__(
@@ -81,12 +76,13 @@ class BridgeEngine:
                     except Exception:
                         # Skip bad rows
                         continue
+            print(f"Loaded {len(self.bridges)} bridges from {csv_path}")
         except FileNotFoundError:
-            # No bridge data – engine will just return "Low" risk with no info
+            print(f"WARNING: {csv_path} not found – bridge checks disabled.")
             self.bridges = []
 
     @staticmethod
-    def _haversine_m(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
+    def haversine_m(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
         """Distance in metres between two lat/lon points."""
         phi1 = math.radians(lat1)
         phi2 = math.radians(lat2)
@@ -100,25 +96,27 @@ class BridgeEngine:
         c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
         return EARTH_RADIUS_M * c
 
-    def check_route(
+    def scan_route(
         self, coords: List[Tuple[float, float]], vehicle_height_m: float
-    ) -> Tuple[BridgeCheckResult, List[Bridge]]:
+    ) -> Tuple[BridgeScanResult, List[Bridge]]:
         """
-        coords: list of (lat, lon) along the route
-        Returns a BridgeCheckResult and a list of nearby bridges (for map plotting)
+        coords: list of [lat, lon] along the route polyline
+        Returns (BridgeScanResult, list_of_nearby_bridges)
         """
 
         if not self.bridges or len(coords) < 2:
-            return BridgeCheckResult(
+            # No data = assume low risk
+            result = BridgeScanResult(
                 has_conflict=False,
                 near_height_limit=False,
                 nearest_bridge=None,
                 nearest_distance_m=None,
                 risk_level="Low",
-            ), []
+            )
+            return result, []
 
-        # Sample every N-th point along the polyline to keep it cheap
-        step = max(1, len(coords) // 100)  # at most ~100 samples
+        # Sample at most ~100 points along route for efficiency
+        step = max(1, len(coords) // 100)
         sample_points = coords[::step]
 
         nearest_bridge: Optional[Bridge] = None
@@ -127,11 +125,10 @@ class BridgeEngine:
         near_limit = False
         nearby_bridges: List[Bridge] = []
 
-        for (plat, plon) in sample_points:
+        for plat, plon in sample_points:
             for bridge in self.bridges:
-                d = self._haversine_m(plat, plon, bridge.lat, bridge.lon)
+                d = self.haversine_m(plat, plon, bridge.lat, bridge.lon)
                 if d <= self.search_radius_m:
-                    # Track for plotting
                     if bridge not in nearby_bridges:
                         nearby_bridges.append(bridge)
 
@@ -146,49 +143,57 @@ class BridgeEngine:
                         nearest_distance_m = d
                         nearest_bridge = bridge
 
-        # Decide risk level
         if has_conflict:
-            risk_level = "High"
+            risk = "High"
         elif near_limit:
-            risk_level = "Medium"
+            risk = "Medium"
         else:
-            risk_level = "Low"
+            risk = "Low"
 
-        result = BridgeCheckResult(
+        result = BridgeScanResult(
             has_conflict=has_conflict,
             near_height_limit=near_limit,
             nearest_bridge=nearest_bridge,
             nearest_distance_m=nearest_distance_m,
-            risk_level=risk_level,
+            risk_level=risk,
         )
         return result, nearby_bridges
 
 
 bridge_engine = BridgeEngine()
 
-# ============== ORS helpers ==============
+# ================== ORS helpers ==================
 
 
-def _call_ors(url: str, params: dict | None = None, body: dict | None = None) -> dict:
+def ors_request(
+    method: str,
+    url: str,
+    params: Optional[Dict[str, str]] = None,
+    body: Optional[dict] = None,
+) -> dict:
+    """Generic ORS HTTP helper using Authorization header."""
     if not ORS_API_KEY:
         raise HTTPException(status_code=500, detail="ORS_API_KEY not configured")
 
     if params is None:
         params = {}
-    params["api_key"] = ORS_API_KEY
 
-    full_url = url + "?" + urllib.parse.urlencode(params)
+    if params:
+        url = url + "?" + urllib.parse.urlencode(params)
 
+    headers = {
+        "Authorization": ORS_API_KEY,
+    }
     data_bytes = None
-    headers = {}
+
     if body is not None:
         headers["Content-Type"] = "application/json"
         data_bytes = json.dumps(body).encode("utf-8")
 
-    req = urllib.request.Request(full_url, data=data_bytes, headers=headers, method="POST" if body else "GET")
+    req = urllib.request.Request(url, data=data_bytes, headers=headers, method=method)
 
     try:
-        with urllib.request.urlopen(req, timeout=20) as resp:
+        with urllib.request.urlopen(req, timeout=30) as resp:
             raw = resp.read().decode("utf-8")
             return json.loads(raw)
     except HTTPException:
@@ -198,17 +203,17 @@ def _call_ors(url: str, params: dict | None = None, body: dict | None = None) ->
 
 
 def geocode_postcode(postcode: str) -> Tuple[float, float]:
-    """
-    Returns (lat, lon) for a UK postcode using ORS geocoding.
-    """
+    """Geocode UK postcode → (lat, lon) using ORS."""
     text = f"{postcode}, UK"
-    data = _call_ors(
-        ORS_GEOCODE_URL,
-        params={"text": text, "boundary.country": "GBR", "size": 1},
-    )
+    params = {
+        "text": text,
+        "boundary.country": "GBR",
+        "size": 1,
+    }
+    data = ors_request("GET", ORS_GEOCODE_URL, params=params)
     features = data.get("features") or []
     if not features:
-        raise HTTPException(status_code=400, detail=f"Could not geocode postcode '{postcode}'")
+        raise HTTPException(status_code=400, detail=f"Could not geocode '{postcode}'")
 
     geom = features[0].get("geometry", {})
     coords = geom.get("coordinates")
@@ -219,9 +224,12 @@ def geocode_postcode(postcode: str) -> Tuple[float, float]:
     return lat, lon
 
 
-def get_hgv_route(start_lat: float, start_lon: float, end_lat: float, end_lon: float):
+def get_hgv_route(
+    start_lat: float, start_lon: float, end_lat: float, end_lon: float
+) -> Tuple[List[List[float]], float, float]:
     """
-    Calls ORS HGV directions and returns (coords[(lat,lon)...], distance_km, duration_min)
+    Calls ORS HGV directions and returns:
+    (coords_latlon_list, distance_km, duration_min)
     """
     body = {
         "coordinates": [
@@ -229,33 +237,29 @@ def get_hgv_route(start_lat: float, start_lon: float, end_lat: float, end_lon: f
             [end_lon, end_lat],
         ]
     }
-    data = _call_ors(
-        ORS_DIRECTIONS_URL,
-        params={"geometry_format": "geojson"},
-        body=body,
-    )
 
-    routes = data.get("routes") or []
-    if not routes:
+    data = ors_request("POST", ORS_DIRECTIONS_URL, body=body)
+    features = data.get("features") or []
+    if not features:
         raise HTTPException(status_code=502, detail="No route returned from ORS")
 
-    route = routes[0]
-    summary = route.get("summary", {})
-    distance_m = float(summary.get("distance", 0.0))
-    duration_s = float(summary.get("duration", 0.0))
+    feat = features[0]
+    props = feat.get("properties", {})
+    segments = props.get("segments") or [{}]
+    seg0 = segments[0]
 
-    geom = route.get("geometry", {})
+    distance_m = float(seg0.get("distance", 0.0))
+    duration_s = float(seg0.get("duration", 0.0))
+
+    geom = feat.get("geometry", {})
     coords_raw = geom.get("coordinates") or []
-    # ORS GeoJSON coords are [lon, lat] – convert to [lat, lon]
-    coords = [[c[1], c[0]] for c in coords_raw]
+    # ORS coords: [lon, lat] → convert to [lat, lon]
+    coords_latlon = [[c[1], c[0]] for c in coords_raw]
 
-    distance_km = distance_m / 1000.0
-    duration_min = duration_s / 60.0
-
-    return coords, distance_km, duration_min
+    return coords_latlon, distance_m / 1000.0, duration_s / 60.0
 
 
-# ============== Pydantic models ==============
+# ================== Pydantic models ==================
 
 
 class RouteRequest(BaseModel):
@@ -266,7 +270,7 @@ class RouteRequest(BaseModel):
 
 
 class RouteGeometry(BaseModel):
-    coords: List[List[float]]
+    coords: List[List[float]]  # [lat, lon]
     distance_km: float
     duration_min: float
 
@@ -287,18 +291,17 @@ class BridgeResultModel(BaseModel):
 
 
 class RouteResponse(BaseModel):
-    metrics: dict
+    metrics: Dict[str, float]
     main_route: RouteGeometry
-    alt_route: Optional[RouteGeometry] = None  # placeholder for future
+    alt_route: Optional[RouteGeometry] = None
     bridges: List[BridgeInfo]
     bridge_result: BridgeResultModel
 
 
-# ============== FastAPI app ==============
+# ================== FastAPI app ==================
 
 app = FastAPI(title="RouteSafe Navigator API", version="1.0")
 
-# CORS so the static frontend can talk to this API
 origins = [
     "https://routesafe-navigator.onrender.com",
     "http://localhost",
@@ -326,24 +329,27 @@ def health():
 
 @app.post("/api/route", response_model=RouteResponse)
 def plan_route(req: RouteRequest):
-    # 1. Geocode postcodes
+    # 1. Geocode
     start_lat, start_lon = geocode_postcode(req.start_postcode)
     end_lat, end_lon = geocode_postcode(req.dest_postcode)
 
-    # 2. Get HGV route from ORS
-    coords, distance_km, duration_min = get_hgv_route(
+    # 2. HGV route
+    coords_latlon, distance_km, duration_min = get_hgv_route(
         start_lat, start_lon, end_lat, end_lon
     )
 
-    # 3. Check for low bridges (if requested)
+    # 3. Bridge scan (if enabled)
     bridges_for_map: List[BridgeInfo] = []
     if req.avoid_low_bridges:
-        br_result, nearby_bridges = bridge_engine.check_route(
-            coords, req.vehicle_height_m
+        scan_result, nearby_bridges = bridge_engine.scan_route(
+            coords_latlon, req.vehicle_height_m
         )
+
         for b in nearby_bridges:
-            # Distance from first point – simple approximation for now
-            d = bridge_engine._haversine_m(coords[0][0], coords[0][1], b.lat, b.lon)
+            # Distance from route start – just for a simple display metric
+            d = bridge_engine.haversine_m(
+                coords_latlon[0][0], coords_latlon[0][1], b.lat, b.lon
+            )
             bridges_for_map.append(
                 BridgeInfo(
                     lat=b.lat,
@@ -354,16 +360,18 @@ def plan_route(req: RouteRequest):
             )
 
         nearest_h = (
-            br_result.nearest_bridge.height_m if br_result.nearest_bridge else None
+            scan_result.nearest_bridge.height_m
+            if scan_result.nearest_bridge
+            else None
         )
-        nearest_d = br_result.nearest_distance_m
+        nearest_d = scan_result.nearest_distance_m
 
         bridge_result_model = BridgeResultModel(
-            has_conflict=br_result.has_conflict,
-            near_height_limit=br_result.near_height_limit,
+            has_conflict=scan_result.has_conflict,
+            near_height_limit=scan_result.near_height_limit,
             nearest_bridge_height_m=nearest_h,
             nearest_bridge_distance_m=nearest_d,
-            risk_level=br_result.risk_level,
+            risk_level=scan_result.risk_level,
         )
     else:
         bridge_result_model = BridgeResultModel(
@@ -375,7 +383,7 @@ def plan_route(req: RouteRequest):
         )
 
     main_geom = RouteGeometry(
-        coords=coords,
+        coords=coords_latlon,
         distance_km=distance_km,
         duration_min=duration_min,
     )
