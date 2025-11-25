@@ -198,6 +198,24 @@
       box-shadow: 0 8px 20px rgba(37, 99, 235, 0.8);
     }
 
+    .btn-secondary {
+      margin-top: 10px;
+      border-radius: 999px;
+      padding: 8px 14px;
+      font-size: 14px;
+      font-weight: 500;
+      background: transparent;
+      border: 1px solid rgba(148, 163, 184, 0.8);
+      color: var(--rs-text);
+      width: 100%;
+      cursor: pointer;
+    }
+
+    .btn-secondary:disabled {
+      opacity: 0.35;
+      cursor: not-allowed;
+    }
+
     .route-status {
       margin-top: 8px;
       display: flex;
@@ -496,6 +514,11 @@
           <span>Low bridge</span>
         </div>
       </div>
+
+      <!-- New: Google Maps hand-off -->
+      <button id="gmaps-button" class="btn-secondary" type="button" disabled>
+        Open in Google Maps (beta)
+      </button>
     </section>
 
     <footer>
@@ -510,6 +533,7 @@
     let mainRouteLayer = null;
     let altRouteLayer = null;
     let bridgeLayerGroup = null;
+    let lastRouteData = null; // store last successful response for Google Maps
 
     function setRouteStatus(mode, text) {
       const el = document.getElementById("route-status-pill");
@@ -651,6 +675,64 @@
       ).textContent = `Uses RouteSafe engine · ORS routing · UK bridge data. Planned route: ${dist} · ${dur} · Risk ${riskPill.textContent}`;
     }
 
+    // Build a Google Maps /dir URL from a list of [lat, lon] coords
+    function buildGoogleMapsUrlFromRoute(coords, maxPoints = 8) {
+      if (!coords || coords.length < 2) return null;
+
+      const total = coords.length;
+      const n = Math.min(maxPoints, total);
+      const step = (total - 1) / (n - 1);
+
+      const sampled = [];
+      for (let i = 0; i < n; i++) {
+        const idx = Math.round(i * step);
+        sampled.push(coords[idx]);
+      }
+
+      const origin = `${sampled[0][0]},${sampled[0][1]}`;
+      const dest = `${sampled[sampled.length - 1][0]},${sampled[sampled.length - 1][1]}`;
+      const wps = sampled.slice(1, -1).map(c => `${c[0]},${c[1]}`).join("/");
+
+      let url = `https://www.google.com/maps/dir/${origin}/`;
+      if (wps) {
+        url += `${wps}/`;
+      }
+      url += dest;
+      return url;
+    }
+
+    // Decide which route to send to Google (main vs alt) and open it
+    function openInGoogleMaps() {
+      if (!lastRouteData) return;
+
+      const br = lastRouteData.bridge_result || {};
+      let route = lastRouteData.main_route;
+
+      // Simple rule: if main is High risk and an alt exists, use the alt for nav
+      if (
+        br.risk_level &&
+        br.risk_level.toLowerCase() === "high" &&
+        lastRouteData.alt_route &&
+        lastRouteData.alt_route.coords &&
+        lastRouteData.alt_route.coords.length
+      ) {
+        route = lastRouteData.alt_route;
+      }
+
+      if (!route || !route.coords || route.coords.length < 2) {
+        alert("No route available for Google Maps.");
+        return;
+      }
+
+      const url = buildGoogleMapsUrlFromRoute(route.coords, 8);
+      if (!url) {
+        alert("Could not build Google Maps link.");
+        return;
+      }
+
+      window.open(url, "_blank");
+    }
+
     async function generateRoute(event) {
       event.preventDefault();
 
@@ -676,6 +758,9 @@
       document.getElementById("nearest-bridge-value").textContent = "–";
       setRouteStatus("loading", "Searching route…");
 
+      lastRouteData = null;
+      document.getElementById("gmaps-button").disabled = true;
+
       const payload = {
         start_postcode: start,
         dest_postcode: dest,
@@ -697,9 +782,11 @@
         }
 
         const data = await resp.json();
+        lastRouteData = data;
         renderRouteOnMap(data);
         updateSummaryPanels(data);
         setRouteStatus("ok", "Route ready");
+        document.getElementById("gmaps-button").disabled = false;
       } catch (err) {
         console.error(err);
         setRouteStatus("error", "Network error");
@@ -711,7 +798,11 @@
       initMap();
       const form = document.getElementById("plan-form");
       form.addEventListener("submit", generateRoute);
+
+      const gmapsBtn = document.getElementById("gmaps-button");
+      gmapsBtn.addEventListener("click", openInGoogleMaps);
     });
   </script>
 </body>
 </html>
+
