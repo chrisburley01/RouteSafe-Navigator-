@@ -554,26 +554,34 @@
       const mainCoords = data.main_route?.coords || [];
       if (!mainCoords.length) return;
 
+      // Main route = solid blue
       const latlngs = mainCoords.map((c) => [c[0], c[1]]);
       mainRouteLayer = L.polyline(latlngs, {
-        weight: 5,
+        color: "#3b82f6",  // blue
+        weight: 5
       }).addTo(map);
 
       let fitBounds = mainRouteLayer.getBounds();
 
+      // Alternative route = dashed purple
       if (data.alt_route && data.alt_route.coords && data.alt_route.coords.length) {
         const altLatLngs = data.alt_route.coords.map((c) => [c[0], c[1]]);
         altRouteLayer = L.polyline(altLatLngs, {
+          color: "#a855f7", // purple
           weight: 4,
-          dashArray: "6 6",
+          dashArray: "6 6"
         }).addTo(map);
         fitBounds = fitBounds.extend(altRouteLayer.getBounds());
       }
 
+      // Low bridges = orange dots
       if (bridgeLayerGroup && data.bridges && data.bridges.length) {
         data.bridges.forEach((b) => {
           const marker = L.circleMarker([b.lat, b.lon], {
-            radius: 5,
+            radius: 6,
+            color: "#f97316",
+            fillColor: "#f97316",
+            fillOpacity: 0.9
           });
           const popup = `Bridge ${b.height_m.toFixed(2)} m`;
           marker.bindPopup(popup);
