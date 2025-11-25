@@ -2,807 +2,392 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>RouteSafe Navigator v1.1</title>
+  <title>RouteSafe Navigator v1.2</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
 
   <!-- Leaflet -->
-  <link
-    rel="stylesheet"
-    href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
-    integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
-    crossorigin=""
-  />
-  <script
-    src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
-    integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
-    crossorigin=""
-  ></script>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 
   <style>
     :root {
       --rs-bg: #020617;
-      --rs-card: #020617;
-      --rs-card-elevated: radial-gradient(circle at top left, #0f172a, #020617 55%);
-      --rs-border: rgba(148, 163, 184, 0.25);
+      --rs-card: #020924;
+      --rs-text-main: #f9fafb;
+      --rs-text-muted: #a7b3d1;
       --rs-accent: #2563eb;
-      --rs-accent-soft: rgba(37, 99, 235, 0.1);
-      --rs-text: #e5e7eb;
-      --rs-text-muted: #9ca3af;
+      --rs-border: #1d2750;
       --rs-success: #16a34a;
-      --rs-warning: #f97316;
+      --rs-warning: #f59e0b;
       --rs-danger: #dc2626;
     }
 
-    * {
-      box-sizing: border-box;
-    }
-
     body {
-      margin: 0;
-      font-family: system-ui, -apple-system, BlinkMacSystemFont, "SF Pro Text",
-        "Segoe UI", sans-serif;
-      background: radial-gradient(circle at top left, #0b1120, #020617 55%);
-      color: var(--rs-text);
-      -webkit-font-smoothing: antialiased;
+      margin:0;
+      font-family: system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+      background: radial-gradient(circle at top left,#0b173d,#020617 52%);
+      color:var(--rs-text-main);
     }
 
-    .page {
-      min-height: 100vh;
-      padding: 16px 16px 32px;
-      max-width: 960px;
-      margin: 0 auto;
-    }
+    .page { max-width:640px; margin:0 auto; padding:16px; }
 
     .card {
-      border-radius: 24px;
-      padding: 20px 20px 18px;
-      background: var(--rs-card-elevated);
-      border: 1px solid rgba(15, 23, 42, 0.9);
-      box-shadow: 0 20px 60px rgba(15, 23, 42, 0.7);
-      position: relative;
-      overflow: hidden;
+      background:radial-gradient(circle at top,#07122e,#020617 55%);
+      border-radius:24px;
+      padding:18px;
+      border:1px solid rgba(148,163,184,0.08);
+      margin-bottom:14px;
+      box-shadow:0 18px 60px rgba(15,23,42,0.75);
     }
 
-    .card + .card {
-      margin-top: 16px;
-    }
+    .card-title { font-size:20px; font-weight:700; }
+    .subtitle { font-size:12px; color:var(--rs-text-muted); }
 
-    .card-header-row {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      margin-bottom: 8px;
-    }
+    .label { font-size:13px; color:var(--rs-text-muted); margin-bottom:4px; }
 
-    .app-tag {
-      font-size: 13px;
-      font-weight: 600;
-      letter-spacing: 0.16em;
-      text-transform: uppercase;
-      color: var(--rs-text-muted);
-    }
-
-    .pill {
-      padding: 4px 12px;
-      border-radius: 999px;
-      border: 1px solid rgba(148, 163, 184, 0.5);
-      font-size: 12px;
-      color: var(--rs-text-muted);
-      display: inline-flex;
-      align-items: center;
-      gap: 6px;
-      backdrop-filter: blur(12px);
-      background: linear-gradient(
-        135deg,
-        rgba(15, 23, 42, 0.9),
-        rgba(15, 23, 42, 0.4)
-      );
-    }
-
-    .pill-dot {
-      width: 6px;
-      height: 6px;
-      border-radius: 999px;
-      background: var(--rs-accent);
-    }
-
-    h1 {
-      margin: 4px 0 6px;
-      font-size: 26px;
-      letter-spacing: 0.02em;
-    }
-
-    .subtitle {
-      margin: 0;
-      font-size: 13px;
-      color: var(--rs-text-muted);
-    }
-
-    .section-title {
-      margin: 0 0 12px;
-      font-size: 18px;
-    }
-
-    .form-grid {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 12px 12px;
-    }
-
-    @media (max-width: 640px) {
-      .form-grid {
-        grid-template-columns: 1fr;
-      }
-    }
-
-    label {
-      display: block;
-      font-size: 13px;
-      margin-bottom: 4px;
-      color: var(--rs-text-muted);
-    }
-
-    input[type="text"],
-    input[type="number"] {
-      width: 100%;
-      border-radius: 999px;
-      border: 1px solid rgba(148, 163, 184, 0.5);
-      padding: 9px 14px;
-      font-size: 14px;
-      color: var(--rs-text);
-      background: radial-gradient(circle at top left, #020617, #020617 60%);
-      outline: none;
-    }
-
-    input::placeholder {
-      color: rgba(148, 163, 184, 0.7);
-    }
-
-    input:focus {
-      border-color: var(--rs-accent);
-      box-shadow: 0 0 0 1px rgba(37, 99, 235, 0.6);
-    }
-
-    .checkbox-row {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      margin-top: 8px;
-      font-size: 14px;
-      color: var(--rs-text-muted);
-    }
-
-    .checkbox-row input[type="checkbox"] {
-      width: 16px;
-      height: 16px;
-      border-radius: 4px;
-      border: 1px solid rgba(148, 163, 184, 0.5);
+    input[type="text"], input[type="number"] {
+      width:100%; border-radius:999px; border:1px solid var(--rs-border);
+      padding:8px 12px; background: #02071b; color:#fff;
     }
 
     .btn-primary {
-      margin-top: 12px;
-      border-radius: 999px;
-      border: none;
-      padding: 10px 18px;
-      font-size: 15px;
-      font-weight: 600;
-      color: white;
-      background: linear-gradient(135deg, #2563eb, #1d4ed8);
-      cursor: pointer;
-      width: 100%;
-      box-shadow: 0 14px 35px rgba(37, 99, 235, 0.6);
-    }
-
-    .btn-primary:active {
-      transform: translateY(1px);
-      box-shadow: 0 8px 20px rgba(37, 99, 235, 0.8);
-    }
-
-    .btn-secondary {
-      margin-top: 10px;
-      border-radius: 999px;
-      padding: 8px 14px;
-      font-size: 14px;
-      font-weight: 500;
-      background: transparent;
-      border: 1px solid rgba(148, 163, 184, 0.8);
-      color: var(--rs-text);
-      width: 100%;
-      cursor: pointer;
-    }
-
-    .btn-secondary:disabled {
-      opacity: 0.35;
-      cursor: not-allowed;
-    }
-
-    .route-status {
-      margin-top: 8px;
-      display: flex;
-      justify-content: flex-end;
-    }
-
-    .status-pill {
-      font-size: 11px;
-      padding: 4px 10px;
-      border-radius: 999px;
-      border: 1px solid transparent;
-      color: var(--rs-text-muted);
-      min-width: 90px;
-      text-align: right;
-    }
-
-    .status-pill.idle {
-      border-color: rgba(148, 163, 184, 0.4);
-      color: var(--rs-text-muted);
-    }
-
-    .status-pill.loading {
-      background: rgba(248, 113, 113, 0.15);
-      border-color: rgba(248, 113, 113, 0.9);
-      color: #fecaca;
-    }
-
-    .status-pill.ok {
-      background: rgba(22, 163, 74, 0.15);
-      border-color: rgba(22, 163, 74, 0.9);
-      color: #bbf7d0;
-    }
-
-    .status-pill.error {
-      background: rgba(220, 38, 38, 0.18);
-      border-color: rgba(220, 38, 38, 0.9);
-      color: #fecaca;
-    }
-
-    .summary-grid {
-      display: grid;
-      grid-template-columns: repeat(4, minmax(0, 1fr));
-      gap: 12px;
-      margin: 10px 0 8px;
-      font-size: 13px;
-    }
-
-    @media (max-width: 768px) {
-      .summary-grid {
-        grid-template-columns: repeat(2, minmax(0, 1fr));
-      }
-    }
-
-    .summary-item-label {
-      color: var(--rs-text-muted);
-      margin-bottom: 2px;
-    }
-
-    .summary-item-value {
-      font-size: 16px;
-      font-weight: 600;
-    }
-
-    .risk-row {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      margin-top: 8px;
-    }
-
-    .risk-pill {
-      padding: 4px 12px;
-      border-radius: 999px;
-      font-size: 13px;
-      font-weight: 600;
-      border: 1px solid transparent;
-    }
-
-    .risk-low {
-      color: #bbf7d0;
-      background: rgba(22, 163, 74, 0.18);
-      border-color: rgba(22, 163, 74, 0.9);
-    }
-
-    .risk-medium {
-      color: #fed7aa;
-      background: rgba(234, 179, 8, 0.2);
-      border-color: rgba(234, 179, 8, 0.95);
-    }
-
-    .risk-high {
-      color: #fecaca;
-      background: rgba(220, 38, 38, 0.25);
-      border-color: rgba(248, 113, 113, 1);
-    }
-
-    .footnote {
-      font-size: 12px;
-      color: var(--rs-text-muted);
-      margin-top: 6px;
+      width:100%; border-radius:999px; border:none;
+      background:linear-gradient(135deg,#2563eb,#4f46e5);
+      padding:10px 16px; color:#fff; font-weight:600;
+      margin-top:12px;
     }
 
     #map {
-      width: 100%;
-      height: 380px;
-      border-radius: 24px;
-      overflow: hidden;
-      border: 1px solid rgba(37, 99, 235, 0.4);
+      width:100%; height:360px;
+      border-radius:18px; overflow:hidden;
     }
 
-    .map-legend {
-      margin-top: 10px;
-      display: flex;
-      flex-wrap: wrap;
-      gap: 14px;
-      font-size: 12px;
-      color: var(--rs-text-muted);
+    .route-status { margin-top:8px; text-align:right; }
+    .status-pill {
+      display:inline-block; padding:4px 12px; font-size:11px;
+      border-radius:999px; border:1px solid transparent;
     }
+    .status-pill.loading { background:rgba(248,113,113,0.15); border-color:rgba(248,113,113,0.8); }
+    .status-pill.ok { background:rgba(22,163,74,0.15); border-color:rgba(22,163,74,0.9); }
+    .status-pill.error { background:rgba(220,38,38,0.18); border-color:rgba(220,38,38,0.9); }
+    .status-pill.idle { border:1px solid rgba(148,163,184,0.4); color:var(--rs-text-muted); }
 
-    .legend-item {
-      display: inline-flex;
-      align-items: center;
-      gap: 6px;
+    /* Camera modal */
+    #camera-modal {
+      position:fixed; inset:0; background:rgba(0,0,0,0.85);
+      display:none; align-items:center; justify-content:center; z-index:9999;
     }
+    #camera-box {
+      background:#020617; border:1px solid #1d2750; border-radius:20px;
+      padding:16px; width:90%; max-width:420px;
+    }
+    #camera-video { width:100%; border-radius:14px; background:black; }
 
-    .legend-swatch {
-      width: 18px;
-      height: 3px;
-      border-radius: 999px;
-    }
-
-    .swatch-main {
-      background: #3b82f6;
-    }
-
-    .swatch-alt {
-      background: #a855f7;
-    }
-
-    .swatch-bridge {
-      width: 10px;
-      height: 10px;
-      border-radius: 999px;
-      background: #f97316;
-    }
-
-    footer {
-      margin-top: 26px;
-      font-size: 11px;
-      color: rgba(148, 163, 184, 0.8);
-      text-align: center;
-    }
   </style>
 </head>
-
 <body>
-  <div class="page">
-    <!-- Hero / header -->
-    <section class="card">
-      <div class="card-header-row">
-        <div>
-          <div class="app-tag">RS</div>
-          <h1>RouteSafe Navigator</h1>
-          <p class="subtitle">
-            Intelligent low-bridge avoidance for HGVs.
-          </p>
-        </div>
-        <div class="pill">
-          <span class="pill-dot"></span>
-          <span>v1.1 · RouteSafe AI</span>
-        </div>
-      </div>
-    </section>
+<div class="page">
 
-    <!-- Plan route -->
-    <section class="card">
-      <h2 class="section-title">Plan route</h2>
-      <p class="subtitle" style="margin-bottom: 12px;">
-        Enter UK postcodes and vehicle height.
-      </p>
+  <!-- Header -->
+  <section class="card">
+    <div class="card-title">RouteSafe Navigator</div>
+    <p class="subtitle">Intelligent low-bridge and HGV routing engine.</p>
+  </section>
 
-      <form id="plan-form">
-        <div class="form-grid">
-          <div>
-            <label for="start-postcode">Start postcode</label>
-            <input
-              id="start-postcode"
-              type="text"
-              placeholder="e.g. LS27 0BN"
-              autocomplete="off"
-            />
+  <!-- Route Planner -->
+  <section class="card">
+    <div class="card-title">Plan route</div>
+    <p class="subtitle">Enter UK postcodes, height and scan reg.</p>
+
+    <form id="route-form">
+
+      <label class="label">Start postcode</label>
+      <input id="start-postcode" type="text" placeholder="LS27 0BN"/>
+
+      <label class="label" style="margin-top:10px;">Destination postcode</label>
+      <input id="dest-postcode" type="text" placeholder="HD5 0RL"/>
+
+      <div style="display:flex; gap:10px; margin-top:10px;">
+        <div style="flex:1;">
+          <label class="label">Vehicle height (m)</label>
+          <input id="vehicle-height" type="number" step="0.1" placeholder="4.5"/>
+        </div>
+        <div style="flex:1;">
+          <label class="label">Vehicle reg</label>
+          <div style="display:flex; gap:6px;">
+            <input id="vehicle-reg" type="text" placeholder="YX71 ABC" style="flex:1;"/>
+            <button type="button" id="scan-reg-btn"
+              style="border-radius:999px; border:1px solid var(--rs-border);
+                     background:#02071b; color:#fff; padding:6px 12px;">
+              📷
+            </button>
           </div>
-          <div>
-            <label for="dest-postcode">Destination postcode</label>
-            <input
-              id="dest-postcode"
-              type="text"
-              placeholder="e.g. HD5 0RL"
-              autocomplete="off"
-            />
-          </div>
-          <div>
-            <label for="vehicle-height">Vehicle height (metres)</label>
-            <input
-              id="vehicle-height"
-              type="number"
-              step="0.1"
-              min="2.0"
-              max="6.5"
-              placeholder="e.g. 4.5"
-            />
-          </div>
-        </div>
-
-        <div class="checkbox-row">
-          <input id="avoid-low-bridges" type="checkbox" checked />
-          <label for="avoid-low-bridges" style="margin: 0;">
-            Avoid low bridges
-          </label>
-        </div>
-
-        <button type="submit" class="btn-primary">
-          Generate safe route
-        </button>
-
-        <div class="route-status">
-          <div id="route-status-pill" class="status-pill idle">
-            Ready
-          </div>
-        </div>
-      </form>
-    </section>
-
-    <!-- Route summary -->
-    <section class="card">
-      <h2 class="section-title">Route summary</h2>
-      <p class="subtitle">
-        Distance, ETA, and nearest low bridge along your selected route.
-      </p>
-
-      <div class="summary-grid">
-        <div>
-          <div class="summary-item-label">Distance</div>
-          <div class="summary-item-value" id="distance-value">–</div>
-        </div>
-        <div>
-          <div class="summary-item-label">Estimated time</div>
-          <div class="summary-item-value" id="time-value">–</div>
-        </div>
-        <div>
-          <div class="summary-item-label">Bridge risk</div>
-          <div class="summary-item-value" id="bridge-risk-value">–</div>
-        </div>
-        <div>
-          <div class="summary-item-label">Nearest bridge</div>
-          <div class="summary-item-value" id="nearest-bridge-value">–</div>
         </div>
       </div>
 
-      <div class="risk-row">
-        <div>
-          <div class="summary-item-label" style="margin-bottom: 4px;">
-            Risk level
-          </div>
-        </div>
-        <div id="risk-pill" class="risk-pill risk-low">
-          Low
-        </div>
+      <label class="label" style="margin-top:10px;">
+        <input id="avoid-low-bridges" checked type="checkbox" />
+        Avoid low bridges
+      </label>
+
+      <button class="btn-primary" type="submit">Generate safe route</button>
+
+      <div class="route-status">
+        <span id="route-status-pill" class="status-pill idle">Ready</span>
       </div>
+    </form>
+  </section>
 
-      <p class="footnote" id="risk-footnote">
-        Uses RouteSafe engine · ORS routing · UK bridge data.
-      </p>
-    </section>
+  <!-- Summary -->
+  <section class="card">
+    <div class="card-title">Route summary</div>
+    <div style="margin-top:8px;">
+      <div class="subtitle">Distance: <span id="summary-distance">-</span></div>
+      <div class="subtitle">Time: <span id="summary-time">-</span></div>
+      <div class="subtitle">Bridge risk: <span id="bridge-risk-text">-</span></div>
+      <div class="subtitle">Nearest bridge: <span id="nearest-bridge-text">-</span></div>
+    </div>
+    <div id="route-summary-status" class="subtitle" style="margin-top:10px;"></div>
+  </section>
 
-    <!-- Map -->
-    <section class="card">
-      <h2 class="section-title">Map</h2>
-      <p class="subtitle" style="margin-bottom: 8px;">
-        RouteSafe engine · ORS + UK bridge data
-      </p>
+  <!-- Map -->
+  <section class="card">
+    <div class="card-title">Map</div>
+    <div id="map"></div>
+  </section>
 
-      <div id="map"></div>
+</div>
 
-      <div class="map-legend">
-        <div class="legend-item">
-          <span class="legend-swatch swatch-main"></span>
-          <span>Main route</span>
-        </div>
-        <div class="legend-item">
-          <span class="legend-swatch swatch-alt"></span>
-          <span>Alternative route</span>
-        </div>
-        <div class="legend-item">
-          <span class="swatch-bridge"></span>
-          <span>Low bridge</span>
-        </div>
-      </div>
+<!-- CAMERA MODAL -->
+<div id="camera-modal">
+  <div id="camera-box">
+    <div style="display:flex; justify-content:space-between; margin-bottom:6px;">
+      <span style="color:#fff;">Scan number plate</span>
+      <button id="camera-close" style="background:none; border:none; color:#fff; font-size:18px;">×</button>
+    </div>
 
-      <!-- New: Google Maps hand-off -->
-      <button id="gmaps-button" class="btn-secondary" type="button" disabled>
-        Open in Google Maps (beta)
-      </button>
-    </section>
+    <video id="camera-video" autoplay playsinline></video>
 
-    <footer>
-      © RouteSafe Navigator · Prototype preview
-    </footer>
+    <button id="camera-capture"
+      style="margin-top:8px; width:100%; border:none; border-radius:999px;
+             padding:10px 0; font-weight:600; background:#2563eb; color:#fff;">
+      Capture & detect
+    </button>
+
+    <div id="camera-status" style="margin-top:6px; font-size:12px; color:#9ca3af;"></div>
   </div>
+</div>
 
-  <script>
-    const API_BASE = "https://routesafe-navigatorv2.onrender.com";
+<script>
+const API_BASE = "https://routesafe-navigatorv2.onrender.com";
 
-    let map;
-    let mainRouteLayer = null;
-    let altRouteLayer = null;
-    let bridgeLayerGroup = null;
-    let lastRouteData = null; // store last successful response for Google Maps
+let map, mainRouteLayer, altRouteLayer, bridgeLayer;
+let cameraStream = null;
 
-    function setRouteStatus(mode, text) {
-      const el = document.getElementById("route-status-pill");
-      if (!el) return;
-      el.className = "status-pill " + mode;
-      el.textContent = text;
-    }
+document.addEventListener("DOMContentLoaded", () => {
+  // Map
+  map = L.map("map").setView([53.8, -1.6], 11);
+  L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png")
+    .addTo(map);
 
-    function initMap() {
-      map = L.map("map", {
-        zoomControl: true,
-        attributionControl: true,
-      }).setView([53.8, -1.6], 9);
+  mainRouteLayer = L.layerGroup().addTo(map);
+  altRouteLayer = L.layerGroup().addTo(map);
+  bridgeLayer  = L.layerGroup().addTo(map);
 
-      L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-        maxZoom: 19,
-        attribution: "&copy; OpenStreetMap contributors",
-      }).addTo(map);
-
-      bridgeLayerGroup = L.layerGroup().addTo(map);
-    }
-
-    function resetMap() {
-      if (!map) return;
-      if (mainRouteLayer) {
-        map.removeLayer(mainRouteLayer);
-        mainRouteLayer = null;
-      }
-      if (altRouteLayer) {
-        map.removeLayer(altRouteLayer);
-        altRouteLayer = null;
-      }
-      if (bridgeLayerGroup) {
-        bridgeLayerGroup.clearLayers();
-      }
-    }
-
-    function renderRouteOnMap(data) {
-      if (!map) return;
-      resetMap();
-
-      const mainCoords = data.main_route?.coords || [];
-      if (!mainCoords.length) return;
-
-      // Main route = solid blue
-      const latlngs = mainCoords.map((c) => [c[0], c[1]]);
-      mainRouteLayer = L.polyline(latlngs, {
-        color: "#3b82f6",  // blue
-        weight: 5
-      }).addTo(map);
-
-      let fitBounds = mainRouteLayer.getBounds();
-
-      // Alternative route = dashed purple
-      if (data.alt_route && data.alt_route.coords && data.alt_route.coords.length) {
-        const altLatLngs = data.alt_route.coords.map((c) => [c[0], c[1]]);
-        altRouteLayer = L.polyline(altLatLngs, {
-          color: "#a855f7", // purple
-          weight: 4,
-          dashArray: "6 6"
-        }).addTo(map);
-        fitBounds = fitBounds.extend(altRouteLayer.getBounds());
-      }
-
-      // Low bridges = orange dots
-      if (bridgeLayerGroup && data.bridges && data.bridges.length) {
-        data.bridges.forEach((b) => {
-          const marker = L.circleMarker([b.lat, b.lon], {
-            radius: 6,
-            color: "#f97316",
-            fillColor: "#f97316",
-            fillOpacity: 0.9
-          });
-          const popup = `Bridge ${b.height_m.toFixed(2)} m`;
-          marker.bindPopup(popup);
-          bridgeLayerGroup.addLayer(marker);
-        });
-      }
-
-      map.fitBounds(fitBounds, { padding: [30, 30] });
-    }
-
-    function fmtKm(km) {
-      if (km == null) return "–";
-      return km.toFixed(1) + " km";
-    }
-
-    function fmtMinutes(min) {
-      if (min == null) return "–";
-      return Math.round(min) + " mins";
-    }
-
-    function updateSummaryPanels(data) {
-      const metrics = data.metrics || {};
-      const br = data.bridge_result || {};
-
-      document.getElementById("distance-value").textContent = fmtKm(
-        metrics.distance_km
-      );
-      document.getElementById("time-value").textContent = fmtMinutes(
-        metrics.duration_min
-      );
-
-      let bridgeRiskText = "None";
-      if (br.has_conflict) {
-        bridgeRiskText = "Conflict";
-      } else if (br.near_height_limit) {
-        bridgeRiskText = "Near limit";
-      }
-      document.getElementById("bridge-risk-value").textContent = bridgeRiskText;
-
-      if (br.nearest_bridge_height_m != null) {
-        const h = br.nearest_bridge_height_m.toFixed(2);
-        document.getElementById(
-          "nearest-bridge-value"
-        ).textContent = `${h} m`;
-      } else {
-        document.getElementById("nearest-bridge-value").textContent = "–";
-      }
-
-      const riskPill = document.getElementById("risk-pill");
-      const level = (br.risk_level || "Low").toLowerCase();
-      riskPill.textContent =
-        level.charAt(0).toUpperCase() + level.slice(1);
-
-      riskPill.className = "risk-pill";
-      if (level === "high") {
-        riskPill.classList.add("risk-high");
-      } else if (level === "medium") {
-        riskPill.classList.add("risk-medium");
-      } else {
-        riskPill.classList.add("risk-low");
-      }
-
-      const dist = fmtKm(metrics.distance_km);
-      const dur = fmtMinutes(metrics.duration_min);
-      document.getElementById(
-        "risk-footnote"
-      ).textContent = `Uses RouteSafe engine · ORS routing · UK bridge data. Planned route: ${dist} · ${dur} · Risk ${riskPill.textContent}`;
-    }
-
-    // Build a Google Maps /dir URL from a list of [lat, lon] coords
-    function buildGoogleMapsUrlFromRoute(coords, maxPoints = 8) {
-      if (!coords || coords.length < 2) return null;
-
-      const total = coords.length;
-      const n = Math.min(maxPoints, total);
-      const step = (total - 1) / (n - 1);
-
-      const sampled = [];
-      for (let i = 0; i < n; i++) {
-        const idx = Math.round(i * step);
-        sampled.push(coords[idx]);
-      }
-
-      const origin = `${sampled[0][0]},${sampled[0][1]}`;
-      const dest = `${sampled[sampled.length - 1][0]},${sampled[sampled.length - 1][1]}`;
-      const wps = sampled.slice(1, -1).map(c => `${c[0]},${c[1]}`).join("/");
-
-      let url = `https://www.google.com/maps/dir/${origin}/`;
-      if (wps) {
-        url += `${wps}/`;
-      }
-      url += dest;
-      return url;
-    }
-
-    // Decide which route to send to Google (main vs alt) and open it
-    function openInGoogleMaps() {
-      if (!lastRouteData) return;
-
-      const br = lastRouteData.bridge_result || {};
-      let route = lastRouteData.main_route;
-
-      // Simple rule: if main is High risk and an alt exists, use the alt for nav
-      if (
-        br.risk_level &&
-        br.risk_level.toLowerCase() === "high" &&
-        lastRouteData.alt_route &&
-        lastRouteData.alt_route.coords &&
-        lastRouteData.alt_route.coords.length
-      ) {
-        route = lastRouteData.alt_route;
-      }
-
-      if (!route || !route.coords || route.coords.length < 2) {
-        alert("No route available for Google Maps.");
-        return;
-      }
-
-      const url = buildGoogleMapsUrlFromRoute(route.coords, 8);
-      if (!url) {
-        alert("Could not build Google Maps link.");
-        return;
-      }
-
-      window.open(url, "_blank");
-    }
-
-    async function generateRoute(event) {
-      event.preventDefault();
-
-      const start = document.getElementById("start-postcode").value.trim();
-      const dest = document.getElementById("dest-postcode").value.trim();
-      const heightStr = document.getElementById("vehicle-height").value.trim();
-      const avoid = document.getElementById("avoid-low-bridges").checked;
-
-      if (!start || !dest || !heightStr) {
-        alert("Please enter start, destination, and vehicle height.");
-        return;
-      }
-
-      const height = parseFloat(heightStr);
-      if (!height || height <= 0) {
-        alert("Please enter a valid vehicle height in metres.");
-        return;
-      }
-
-      document.getElementById("distance-value").textContent = "–";
-      document.getElementById("time-value").textContent = "–";
-      document.getElementById("bridge-risk-value").textContent = "–";
-      document.getElementById("nearest-bridge-value").textContent = "–";
-      setRouteStatus("loading", "Searching route…");
-
-      lastRouteData = null;
-      document.getElementById("gmaps-button").disabled = true;
-
-      const payload = {
-        start_postcode: start,
-        dest_postcode: dest,
-        vehicle_height_m: height,
-        avoid_low_bridges: avoid,
-      };
-
-      try {
-        const resp = await fetch(`${API_BASE}/api/route`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(payload),
-        });
-
-        if (!resp.ok) {
-          setRouteStatus("error", `v2 error ${resp.status}`);
-          alert("Sorry – couldn’t generate a route. Check the v2 service.");
-          return;
-        }
-
-        const data = await resp.json();
-        lastRouteData = data;
-        renderRouteOnMap(data);
-        updateSummaryPanels(data);
-        setRouteStatus("ok", "Route ready");
-        document.getElementById("gmaps-button").disabled = false;
-      } catch (err) {
-        console.error(err);
-        setRouteStatus("error", "Network error");
-        alert("Network error talking to v2 service.");
-      }
-    }
-
-    document.addEventListener("DOMContentLoaded", () => {
-      initMap();
-      const form = document.getElementById("plan-form");
-      form.addEventListener("submit", generateRoute);
-
-      const gmapsBtn = document.getElementById("gmaps-button");
-      gmapsBtn.addEventListener("click", openInGoogleMaps);
+  document.getElementById("route-form")
+    .addEventListener("submit", (e) => {
+      e.preventDefault();
+      generateRoute();
     });
-  </script>
+
+  setupRegCamera();
+});
+
+function setRouteStatus(mode, text) {
+  const el = document.getElementById("route-status-pill");
+  el.className = "status-pill " + mode;
+  el.textContent = text;
+}
+
+/* ==============================
+   REG CAMERA SETUP
+============================== */
+function setupRegCamera() {
+  const scanBtn = document.getElementById("scan-reg-btn");
+  const modal   = document.getElementById("camera-modal");
+  const video   = document.getElementById("camera-video");
+  const closeBtn= document.getElementById("camera-close");
+  const snapBtn = document.getElementById("camera-capture");
+  const status  = document.getElementById("camera-status");
+
+  scanBtn.onclick = async () => {
+    modal.style.display = "flex";
+    status.textContent = "Opening camera…";
+
+    try {
+      cameraStream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode:"environment" }
+      });
+      video.srcObject = cameraStream;
+      status.textContent = "Point at number plate, then tap capture.";
+    } catch {
+      status.textContent = "Camera blocked.";
+    }
+  };
+
+  closeBtn.onclick = () => closeCameraModal();
+  snapBtn.onclick  = () => captureReg(video, status);
+}
+
+function closeCameraModal() {
+  const modal = document.getElementById("camera-modal");
+  modal.style.display = "none";
+
+  if (cameraStream) {
+    cameraStream.getTracks().forEach(t => t.stop());
+    cameraStream = null;
+  }
+}
+
+/* ==============================
+   CAPTURE FRAME + SEND TO API
+============================== */
+async function captureReg(video, statusEl) {
+  if (!video.videoWidth) {
+    statusEl.textContent = "Camera not ready.";
+    return;
+  }
+
+  // Draw frame
+  const canvas = document.createElement("canvas");
+  canvas.width  = video.videoWidth;
+  canvas.height = video.videoHeight;
+  canvas.getContext("2d").drawImage(video, 0,0);
+
+  const blob = await new Promise(res => canvas.toBlob(res,"image/jpeg",0.8));
+  const formData = new FormData();
+  formData.append("image", blob, "reg.jpg");
+
+  statusEl.textContent = "Detecting…";
+
+  try {
+    const resp = await fetch(`${API_BASE}/api/scan-reg`, {
+      method:"POST",
+      body: formData
+    });
+    const data = await resp.json();
+
+    if (!resp.ok) {
+      statusEl.textContent = "Error: " + resp.status;
+      return;
+    }
+
+    const reg = data.reg || "";
+    if (!reg) {
+      statusEl.textContent = "No plate detected.";
+      return;
+    }
+
+    document.getElementById("vehicle-reg").value = reg;
+    statusEl.textContent = "Detected: " + reg;
+
+    setTimeout(() => closeCameraModal(), 600);
+
+  } catch {
+    statusEl.textContent = "Network error.";
+  }
+}
+
+/* ==============================
+   ROUTE GENERATION
+============================== */
+async function generateRoute() {
+  const start = document.getElementById("start-postcode").value.trim();
+  const dest  = document.getElementById("dest-postcode").value.trim();
+  const height= parseFloat(document.getElementById("vehicle-height").value);
+  const avoid = document.getElementById("avoid-low-bridges").checked;
+
+  if (!start || !dest || isNaN(height)) {
+    alert("Enter start, dest and height.");
+    return;
+  }
+
+  setRouteStatus("loading","Searching…");
+
+  try {
+    const resp = await fetch(`${API_BASE}/api/route`,{
+      method:"POST",
+      headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({
+        start_postcode:start,
+        dest_postcode:dest,
+        vehicle_height_m:height,
+        avoid_low_bridges:avoid
+      })
+    });
+
+    const text = await resp.text();
+    if (!resp.ok) {
+      alert("Error " + resp.status + ":\n" + text);
+      setRouteStatus("error","Error");
+      return;
+    }
+
+    const data = JSON.parse(text);
+    renderRoute(data);
+    updateSummary(data);
+    setRouteStatus("ok","Route ready");
+
+  } catch (err) {
+    alert("Network error.");
+    setRouteStatus("error","Network error");
+  }
+}
+
+function toLatLng(coords) {
+  if (!coords) return [];
+  return coords.map(c => [c[0], c[1]]);
+}
+
+function renderRoute(data) {
+  mainRouteLayer.clearLayers();
+  altRouteLayer.clearLayers();
+  bridgeLayer.clearLayers();
+
+  const main = toLatLng(data.main_route?.coords);
+  if (main.length) {
+    const line = L.polyline(main,{color:"#3b82f6",weight:5});
+    mainRouteLayer.addLayer(line);
+    map.fitBounds(line.getBounds().pad(0.2));
+  }
+
+  const alt = toLatLng(data.alt_route?.coords);
+  if (alt.length) {
+    altRouteLayer.addLayer(
+      L.polyline(alt,{color:"#a855f7",weight:3, dashArray:"6 6"})
+    );
+  }
+
+  (data.bridges||[]).forEach(b=>{
+    L.circleMarker([b.lat,b.lon],{
+      radius:6, color:"#f97316", fillColor:"#f97316", fillOpacity:1
+    }).addTo(bridgeLayer);
+  });
+}
+
+function updateSummary(data) {
+  const m = data.metrics;
+  document.getElementById("summary-distance").textContent =
+    m.distance_km.toFixed(1)+" km";
+  document.getElementById("summary-time").textContent =
+    m.duration_min.toFixed(0)+" mins";
+
+  const br = data.bridge_result;
+  document.getElementById("bridge-risk-text").textContent = br.risk_level;
+  document.getElementById("nearest-bridge-text").textContent =
+    br.nearest_bridge_height_m ? br.nearest_bridge_height_m+" m" : "-";
+}
+</script>
+
 </body>
 </html>
-
