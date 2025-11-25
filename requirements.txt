@@ -3,5 +3,3 @@ uvicorn[standard]
 pandas
 openrouteservice
 python-dotenv
-python-multipart
-requests
