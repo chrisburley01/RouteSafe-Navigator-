@@ -17,8 +17,7 @@ app = FastAPI(title="RouteSafe Navigator API", version="1.1")
 
 app.add_middleware(
     CORSMiddleware,
-    # Frontend is on a different Render service, so allow all
-    allow_origins=["*"],
+    allow_origins=["*"],  # frontend is separate service
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -41,6 +40,9 @@ _ors_client: Optional[openrouteservice.Client] = None
 
 
 def get_ors_client() -> openrouteservice.Client:
+    """
+    Lazily construct an ORS client using ORS_API_KEY.
+    """
     global _ors_client
     if _ors_client is None:
         api_key = os.getenv("ORS_API_KEY")
@@ -53,17 +55,38 @@ def get_ors_client() -> openrouteservice.Client:
 def geocode_postcode(postcode: str) -> Tuple[float, float]:
     """
     Geocode a UK postcode to (lat, lon) via ORS Pelias.
+    Raises HTTPException(400/500) with useful message on failure.
     """
-    client = get_ors_client()
-    res = client.pelias_search(text=postcode, size=1)
+    try:
+        client = get_ors_client()
+    except Exception as e:
+        raise HTTPException(
+            status_code=500, detail=f"ORS client error: {e}"
+        )
+
+    try:
+        res = client.pelias_search(text=postcode, size=1)
+    except Exception as e:
+        raise HTTPException(
+            status_code=500, detail=f"Error calling ORS Pelias for '{postcode}': {e}"
+        )
+
     features = res.get("features")
     if not features:
         raise HTTPException(
             status_code=400,
-            detail=f"Could not geocode postcode '{postcode}'",
+            detail=f"Could not geocode postcode '{postcode}' (no features returned)",
         )
-    coords = features[0]["geometry"]["coordinates"]  # [lon, lat]
-    lon, lat = coords[0], coords[1]
+
+    try:
+        coords = features[0]["geometry"]["coordinates"]  # [lon, lat]
+        lon, lat = float(coords[0]), float(coords[1])
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Unexpected geocode result structure for '{postcode}': {e}",
+        )
+
     return lat, lon
 
 
@@ -73,10 +96,12 @@ _bridge_engine: Optional[BridgeEngine] = None
 
 
 def get_bridge_engine() -> BridgeEngine:
+    """
+    Lazily construct BridgeEngine. Any CSV / file issues will bubble up here.
+    """
     global _bridge_engine
     if _bridge_engine is None:
-        # bridge_engine already knows how to find the CSV by default
-        _bridge_engine = BridgeEngine()
+        _bridge_engine = BridgeEngine()  # auto-locates bridge CSV
     return _bridge_engine
 
 
@@ -115,19 +140,17 @@ class RouteResponse(BaseModel):
     metrics: RouteMetrics
     main_route: RouteGeometry
     alt_route: Optional[RouteGeometry] = None
-    low_bridges: List[BridgeInfo] = []
+    low_bridges: List[BridgeInfo] = Field(default_factory=list)
 
 
-# ================= DVLA vehicle lookup models =================
+# ================= DVLA models & helper =================
 
 
 class VehicleLookupRequest(BaseModel):
-    """Request body for DVLA lookup."""
     registration: str = Field(..., example="YX71OXC")
 
 
 class VehicleDetails(BaseModel):
-    """Subset of useful DVLA fields plus the raw payload."""
     registration: str
     make: Optional[str] = None
     colour: Optional[str] = None
@@ -140,18 +163,15 @@ class VehicleDetails(BaseModel):
     raw: dict
 
 
-# ================= DVLA helper =================
-
-
 def lookup_vehicle_via_dvla(registration: str) -> Optional[dict]:
     """
     Calls the DVLA Vehicle Enquiry Service.
 
     Returns the parsed JSON dict if successful, otherwise None.
+    Silently returns None if no DVLA key is configured.
     """
     api_key = os.getenv("DVLA_API_KEY")
     if not api_key:
-        # If key not configured, just quietly skip
         return None
 
     url = os.getenv(
@@ -187,8 +207,6 @@ def lookup_vehicle_via_dvla(registration: str) -> Optional[dict]:
 def get_vehicle_details(req: VehicleLookupRequest):
     """
     Look up basic vehicle details from DVLA by registration.
-
-    (Does NOT affect routing if DVLA is unavailable.)
     """
     data = lookup_vehicle_via_dvla(req.registration)
     if data is None:
@@ -225,9 +243,14 @@ def analyse_bridges_along_route(
     Walk along the route polyline and use BridgeEngine to find
     nearest low bridge and overall risk.
     """
-    engine = get_bridge_engine()
+    try:
+        engine = get_bridge_engine()
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"BridgeEngine initialisation error: {e}",
+        )
 
-    # down-sample to at most ~100 segments
     step = max(1, len(coords) // 100)
     sample_points = coords[::step]
     if sample_points[-1] is not coords[-1]:
@@ -242,11 +265,17 @@ def analyse_bridges_along_route(
         lon1, lat1 = sample_points[i]
         lon2, lat2 = sample_points[i + 1]
 
-        result: BridgeCheckResult = engine.check_leg_for_bridges(
-            (lat1, lon1),
-            (lat2, lon2),
-            vehicle_height_m=vehicle_height_m,
-        )
+        try:
+            result: BridgeCheckResult = engine.check_leg_for_bridges(
+                (lat1, lon1),
+                (lat2, lon2),
+                vehicle_height_m=vehicle_height_m,
+            )
+        except Exception as e:
+            raise HTTPException(
+                status_code=500,
+                detail=f"BridgeEngine leg check error: {e}",
+            )
 
         if result.nearest_bridge is not None and result.nearest_distance_m is not None:
             low_bridges.append(
@@ -274,7 +303,6 @@ def make_avoid_polygon(lat: float, lon: float, radius_m: float = 250.0) -> dict:
     """
     Build a small circular-ish polygon around a bridge to tell ORS to avoid.
     """
-    # rough metres-per-degree
     lat_rad = math.radians(lat)
     m_per_deg_lat = 111_320.0
     m_per_deg_lon = 111_320.0 * math.cos(lat_rad)
@@ -291,7 +319,6 @@ def make_avoid_polygon(lat: float, lon: float, radius_m: float = 250.0) -> dict:
                 lat + dlat * math.sin(ang),
             ]
         )
-    # close polygon
     ring.append(ring[0])
 
     return {
@@ -304,10 +331,9 @@ def make_avoid_polygon(lat: float, lon: float, radius_m: float = 250.0) -> dict:
 def plan_route(req: RouteRequest):
     """
     Plan a route between two postcodes for a given vehicle height.
+    Returns metrics, main route, optional alt route, and low bridges.
     """
-    client = get_ors_client()
-
-    # 1. Geocode postcodes
+    # 1. Geocode postcodes (now with clear error messages)
     start_lat, start_lon = geocode_postcode(req.start_postcode)
     end_lat, end_lon = geocode_postcode(req.dest_postcode)
 
@@ -315,21 +341,37 @@ def plan_route(req: RouteRequest):
 
     # 2. Get main HGV route from ORS
     try:
+        client = get_ors_client()
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"ORS client error: {e}",
+        )
+
+    try:
         route = client.directions(
             coordinates=coords,
             profile="driving-hgv",
             format="geojson",
         )
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error getting route from ORS: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error getting main HGV route from ORS: {e}",
+        )
 
-    feat = route["features"][0]
-    geom = feat["geometry"]["coordinates"]  # list of [lon, lat]
-
-    props = feat.get("properties", {})
-    summary = props.get("summary", {})
-    distance_km = float(summary.get("distance", 0.0)) / 1000.0
-    duration_min = float(summary.get("duration", 0.0)) / 60.0
+    try:
+        feat = route["features"][0]
+        geom = feat["geometry"]["coordinates"]  # list of [lon, lat]
+        props = feat.get("properties", {})
+        summary = props.get("summary", {})
+        distance_km = float(summary.get("distance", 0.0)) / 1000.0
+        duration_min = float(summary.get("duration", 0.0)) / 60.0
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Unexpected ORS directions structure: {e}",
+        )
 
     # 3. Bridge analysis
     risk_level, best_bridge, best_distance, low_bridges = analyse_bridges_along_route(
@@ -342,7 +384,7 @@ def plan_route(req: RouteRequest):
 
     main_geom = RouteGeometry(coords=geom)
 
-    # 4. If conflict & avoid_low_bridges, ask ORS for alternative avoiding that bridge
+    # 4. If conflict & avoid_low_bridges, request an alternative route
     alt_geom: Optional[RouteGeometry] = None
     if req.avoid_low_bridges and risk_level == "Conflict" and best_bridge is not None:
         avoid_poly = make_avoid_polygon(best_bridge.lat, best_bridge.lon)
@@ -357,8 +399,9 @@ def plan_route(req: RouteRequest):
             alt_feat = alt_route["features"][0]
             alt_geom_coords = alt_feat["geometry"]["coordinates"]
             alt_geom = RouteGeometry(coords=alt_geom_coords)
-        except Exception:
-            # If alt fetch fails, we still return main route
+        except Exception as e:
+            # Log in detail, but don't hard-fail the endpoint
+            print(f"Alternative route fetch failed: {e}")
             alt_geom = None
 
     metrics = RouteMetrics(
