@@ -68,7 +68,8 @@ def geocode_postcode(postcode: str) -> Tuple[float, float]:
         res = client.pelias_search(text=postcode, size=1)
     except Exception as e:
         raise HTTPException(
-            status_code=500, detail=f"Error calling ORS Pelias for '{postcode}': {e}"
+            status_code=500,
+            detail=f"Error calling ORS Pelias for '{postcode}': {e}",
         )
 
     features = res.get("features")
@@ -333,88 +334,107 @@ def plan_route(req: RouteRequest):
     Plan a route between two postcodes for a given vehicle height.
     Returns metrics, main route, optional alt route, and low bridges.
     """
-    # 1. Geocode postcodes (now with clear error messages)
-    start_lat, start_lon = geocode_postcode(req.start_postcode)
-    end_lat, end_lon = geocode_postcode(req.dest_postcode)
-
-    coords = [(start_lon, start_lat), (end_lon, end_lat)]
-
-    # 2. Get main HGV route from ORS
     try:
-        client = get_ors_client()
-    except Exception as e:
-        raise HTTPException(
-            status_code=500,
-            detail=f"ORS client error: {e}",
-        )
+        # 1. Geocode postcodes
+        start_lat, start_lon = geocode_postcode(req.start_postcode)
+        end_lat, end_lon = geocode_postcode(req.dest_postcode)
 
-    try:
-        route = client.directions(
-            coordinates=coords,
-            profile="driving-hgv",
-            format="geojson",
-        )
-    except Exception as e:
-        raise HTTPException(
-            status_code=500,
-            detail=f"Error getting main HGV route from ORS: {e}",
-        )
+        coords = [(start_lon, start_lat), (end_lon, end_lat)]
 
-    try:
-        feat = route["features"][0]
-        geom = feat["geometry"]["coordinates"]  # list of [lon, lat]
-        props = feat.get("properties", {})
-        summary = props.get("summary", {})
-        distance_km = float(summary.get("distance", 0.0)) / 1000.0
-        duration_min = float(summary.get("duration", 0.0)) / 60.0
-    except Exception as e:
-        raise HTTPException(
-            status_code=500,
-            detail=f"Unexpected ORS directions structure: {e}",
-        )
-
-    # 3. Bridge analysis
-    risk_level, best_bridge, best_distance, low_bridges = analyse_bridges_along_route(
-        geom,
-        vehicle_height_m=req.vehicle_height_m,
-    )
-
-    nearest_height = best_bridge.height_m if best_bridge else None
-    nearest_distance = best_distance
-
-    main_geom = RouteGeometry(coords=geom)
-
-    # 4. If conflict & avoid_low_bridges, request an alternative route
-    alt_geom: Optional[RouteGeometry] = None
-    if req.avoid_low_bridges and risk_level == "Conflict" and best_bridge is not None:
-        avoid_poly = make_avoid_polygon(best_bridge.lat, best_bridge.lon)
+        # 2. Get main HGV route from ORS
+        try:
+            client = get_ors_client()
+        except Exception as e:
+            raise HTTPException(
+                status_code=500,
+                detail=f"ORS client error: {e}",
+            )
 
         try:
-            alt_route = client.directions(
+            route = client.directions(
                 coordinates=coords,
                 profile="driving-hgv",
                 format="geojson",
-                options={"avoid_polygons": avoid_poly},
             )
-            alt_feat = alt_route["features"][0]
-            alt_geom_coords = alt_feat["geometry"]["coordinates"]
-            alt_geom = RouteGeometry(coords=alt_geom_coords)
         except Exception as e:
-            # Log in detail, but don't hard-fail the endpoint
-            print(f"Alternative route fetch failed: {e}")
-            alt_geom = None
+            raise HTTPException(
+                status_code=500,
+                detail=f"Error getting main HGV route from ORS: {e}",
+            )
 
-    metrics = RouteMetrics(
-        distance_km=distance_km,
-        duration_min=duration_min,
-        bridge_risk=risk_level,
-        nearest_bridge_height_m=nearest_height,
-        nearest_bridge_distance_m=nearest_distance,
-    )
+        try:
+            feat = route["features"][0]
+            geom = feat["geometry"]["coordinates"]  # list of [lon, lat]
+            props = feat.get("properties", {})
+            summary = props.get("summary", {})
+            distance_km = float(summary.get("distance", 0.0)) / 1000.0
+            duration_min = float(summary.get("duration", 0.0)) / 60.0
+        except Exception as e:
+            raise HTTPException(
+                status_code=500,
+                detail=f"Unexpected ORS directions structure: {e}",
+            )
 
-    return RouteResponse(
-        metrics=metrics,
-        main_route=main_geom,
-        alt_route=alt_geom,
-        low_bridges=low_bridges,
-    )
+        # 3. Bridge analysis
+        (
+            risk_level,
+            best_bridge,
+            best_distance,
+            low_bridges,
+        ) = analyse_bridges_along_route(
+            geom,
+            vehicle_height_m=req.vehicle_height_m,
+        )
+
+        nearest_height = best_bridge.height_m if best_bridge else None
+        nearest_distance = best_distance
+
+        main_geom = RouteGeometry(coords=geom)
+
+        # 4. If conflict & avoid_low_bridges, request an alternative route
+        alt_geom: Optional[RouteGeometry] = None
+        if (
+            req.avoid_low_bridges
+            and risk_level == "Conflict"
+            and best_bridge is not None
+        ):
+            avoid_poly = make_avoid_polygon(best_bridge.lat, best_bridge.lon)
+
+            try:
+                alt_route = client.directions(
+                    coordinates=coords,
+                    profile="driving-hgv",
+                    format="geojson",
+                    options={"avoid_polygons": avoid_poly},
+                )
+                alt_feat = alt_route["features"][0]
+                alt_geom_coords = alt_feat["geometry"]["coordinates"]
+                alt_geom = RouteGeometry(coords=alt_geom_coords)
+            except Exception as e:
+                # Log in detail, but don't hard-fail the endpoint
+                print(f"Alternative route fetch failed: {e}")
+                alt_geom = None
+
+        metrics = RouteMetrics(
+            distance_km=distance_km,
+            duration_min=duration_min,
+            bridge_risk=risk_level,
+            nearest_bridge_height_m=nearest_height,
+            nearest_bridge_distance_m=nearest_distance,
+        )
+
+        return RouteResponse(
+            metrics=metrics,
+            main_route=main_geom,
+            alt_route=alt_geom,
+            low_bridges=low_bridges,
+        )
+
+    except HTTPException:
+        # Let FastAPI return the HTTPException as-is
+        raise
+    except Exception as e:
+        # Catch absolutely anything else and surface it
+        raise HTTPException(
+            status_code=500, detail=f"Unhandled server error: {e}"
+        )
