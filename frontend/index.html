@@ -551,7 +551,8 @@
 
   <script>
     (function () {
-      const API_URL = "https://routesafe-navigatorv2.onrender.com/api/route";
+      // 🔧 Back to same-origin API
+      const API_URL = "/api/route";
 
       const form = document.getElementById("route-form");
       const startInput = document.getElementById("start");
@@ -713,7 +714,6 @@
 
           const data = await resp.json();
 
-          // Support both old and new response shapes
           const metrics = data.metrics || {};
           const distanceKm = metrics.distance_km ?? data.distance_km ?? null;
           const durationMin = metrics.duration_min ?? data.duration_min ?? null;
@@ -744,7 +744,6 @@
             (data.bridge_result && data.bridge_result.nearest_bridge_lon) ||
             null;
 
-          // Geometry
           const mainCoords =
             (data.main_route && data.main_route.coords) ||
             (data.geometry && (data.geometry.coords || data.geometry.coordinates)) ||
@@ -763,7 +762,6 @@
             throw new Error("No route geometry returned");
           }
 
-          // Decide which route is "safe"
           const riskLower = String(bridgeRisk || "").toLowerCase();
           const hasAlt = altLatLng.length > 0;
 
@@ -772,13 +770,11 @@
           let mainIsSafe = true;
 
           if ((riskLower === "conflict" || riskLower === "high") && hasAlt) {
-            // Flip: alternative is the safe route
             safeLatLng = altLatLng;
             unsafeLatLng = mainLatLng;
             mainIsSafe = false;
           }
 
-          // Draw safe + other route
           if (safeLatLng && safeLatLng.length) {
             mainLayer = L.polyline(safeLatLng, {
               color: "#3b82f6",
@@ -794,7 +790,6 @@
             }).addTo(map);
           }
 
-          // Bridge marker
           if (bridgeLat != null && bridgeLon != null) {
             bridgeMarker = L.circleMarker([bridgeLat, bridgeLon], {
               radius: 7,
@@ -804,7 +799,6 @@
             }).addTo(map);
           }
 
-          // Fit map
           let allPoints = [];
           if (safeLatLng) allPoints = allPoints.concat(safeLatLng);
           if (unsafeLatLng) allPoints = allPoints.concat(unsafeLatLng);
@@ -816,7 +810,6 @@
             map.fitBounds(bounds, { padding: [20, 20] });
           }
 
-          // Summary
           if (distanceKm != null) {
             summaryDistance.textContent = distanceKm.toFixed(1) + " km";
           } else {
@@ -846,7 +839,6 @@
             ? "Main route is safe."
             : "Alternative route selected as safe.");
 
-          // Google Maps = safe route
           safeRouteLatLngs = (mainLayer && mainLayer.getLatLngs()) || null;
           gmapsBtn.disabled = !safeRouteLatLngs || !safeRouteLatLngs.length;
         } catch (err) {
@@ -858,7 +850,6 @@
         }
       });
 
-      // Initial state
       setStatus("idle", "Ready.");
       setRiskPill(null);
     })();
